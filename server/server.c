@@ -16,6 +16,7 @@
 void *handle_clnt(void * arg);
 void send_msg(char * msg, int len);
 void error_handling(char * msg);
+int read_all(int sock, void *buf, int len);
 
 int clnt_cnt = 0;
 int clnt_socks[MAX_CLNT];
@@ -66,22 +67,32 @@ int main(int argc, char *argv[]){
 }
 
 void * handle_clnt(void * arg){
+    ClientInfo new_client;
+
     int clnt_sock = *((int*)arg);
     int str_len=0, i, fd, user_id_num;
     char msg[BUF_SIZE];
     char clnt_name[BUF_SIZE], file_buf[BUF_SIZE], buf[BUF_SIZE], status[1];
     pthread_mutex_lock(&mutx);
         int len = 0;
-        ClientInfo new_client;
+        
         //clnt_socks[clnt_cnt++]=clnt_sock;
         memset(clnt_name, 0x00, BUF_SIZE);
         memset(file_buf, 0x00, BUF_SIZE);
         //접속한 클라이언트 이름
-        len = read(clnt_sock, clnt_name, NAME_SIZE-1);
-        clnt_name[len] = '\0';
+
+        int32_t net_len;
+        int32_t nlen;
+
+        //read(clnt_sock, &net_len, sizeof(net_len));
+        read_all(clnt_sock, &net_len, sizeof(net_len));
+        nlen = ntohl(net_len);
+        read(clnt_sock, clnt_name, nlen);
+        clnt_name[nlen] = '\0';
+
         printf("clnt_name:  %s len : %ld\n", clnt_name, strlen(clnt_name));
         strncpy(new_client.user_name, clnt_name, strlen(clnt_name));
-        sleep(1);
+      
 
         //기존 유저인지 확인
         read(clnt_sock, status, 1);
@@ -107,16 +118,22 @@ void * handle_clnt(void * arg){
 
             printf("new user_id_num : %d\n", user_id_num);
             snprintf(file_buf, BUF_SIZE, "%d", user_id_num);
-            write(clnt_sock, file_buf, BUF_SIZE);
+            nlen = (int32_t)strlen(file_buf);
+            printf("file buf nlen: %d\n", nlen);
+            int32_t net_len = htonl(nlen);
+
+            write(clnt_sock, &net_len, sizeof(net_len));
+            write(clnt_sock, file_buf, nlen);
 
             lseek(fd, 0, SEEK_SET);
-            write(fd, file_buf, strlen(file_buf));
+            write(fd, file_buf, nlen);
             close(fd);
         }else if(strcmp(status, "0") == 0){
             //status = 0 -> 기존 유저
-
-            len = read(clnt_sock, buf, BUF_SIZE);
-            buf[len] = '\0';
+            read_all(clnt_sock, &net_len, sizeof(net_len));
+            nlen = ntohl(net_len);
+            read(clnt_sock, buf, nlen);
+            buf[nlen] = '\0';
            
             user_id_num = atoi(buf);
             printf("user_id: %d\n", user_id_num);
@@ -125,18 +142,55 @@ void * handle_clnt(void * arg){
         printf("\n now user_id: %d\n", user_id_num);
         
         
-        //접속한 클라이언트 정보 저장
         
         new_client.sock_fd = clnt_sock;
         new_client.user_id = user_id_num;
         
-        clients[clnt_cnt++] = new_client;
         printf("\nclient sock : %d\n", new_client.sock_fd);
         printf("client_user_id : %d\n", new_client.user_id);
         printf("client_name: %s\n\n", new_client.user_name);
-        printf("현재 접속한 클라이언트 수 : [%d]", clnt_cnt);
-        pthread_mutex_unlock(&mutx);
         
+        //접속한 클라이언트 정보 저장
+        clients[clnt_cnt++] = new_client;
+        printf("현재 접속한 클라이언트 수 : [%d]\n", clnt_cnt);
+        pthread_mutex_unlock(&mutx);
+    while(1){
+        memset(buf, 0x00, BUF_SIZE);
+        read_all(clnt_sock, &net_len, sizeof(net_len));
+        nlen = ntohl(net_len);
+        read(clnt_sock, buf, nlen);
+
+        printf("클라이언트가 요청한 명령 : %s\n", buf);
+
+        if(strcmp(buf, "exit") == 0){
+            printf("[%s] 클라이언트 접속 종료\n", new_client.user_name);
+            
+            pthread_mutex_lock(&mutx);
+            for(i=0; i<clnt_cnt; i++){
+                if(clnt_sock == clients[i].sock_fd){
+                    while(i++<clnt_cnt-1)
+                        clients[i] = clients[i+1];
+                    break;
+                }
+            
+            }
+            clnt_cnt--;
+            printf("현재 접속한 클라이언트 수 : [%d]\n", clnt_cnt);
+            pthread_mutex_unlock(&mutx);
+            close(clnt_sock);
+            return NULL;
+        }else if(strcmp(buf, "mkroom") == 0){
+            char room_name[NAME_SIZE];
+
+            read_all(clnt_sock, &net_len, sizeof(net_len));
+            nlen = ntohl(net_len);
+            read(clnt_sock, room_name, nlen);
+            printf("request user_id : %d\n", new_client.user_id);
+            printf("room_name : %s\n", room_name);
+
+        }
+    }    
+    /*
     while((str_len=read(clnt_sock, msg, sizeof(msg)))!=0)
         send_msg(msg, str_len);
     
@@ -153,6 +207,7 @@ void * handle_clnt(void * arg){
         pthread_mutex_unlock(&mutx);
         close(clnt_sock);
         return NULL;
+        */
 }
 
 void send_msg(char * msg, int len){
@@ -161,6 +216,16 @@ void send_msg(char * msg, int len){
     for(i=0; i<clnt_cnt; i++)
         write(clnt_socks[i], msg, len);
     pthread_mutex_unlock(&mutx);
+}
+
+int read_all(int sock, void *buf, int len) {//길이 4바이트를 받는 함수
+    int received = 0;
+    while(received < len) {
+        int n = read(sock, buf + received, len - received);
+        if(n <= 0) return n;  // error or disconnected
+        received += n;
+    }
+    return received;
 }
 
 void error_handling(char * msg){

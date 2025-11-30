@@ -14,6 +14,7 @@
 void * send_msg(void * arg);
 void * recv_msg(void * msg);
 void error_handling(char * msg);
+int read_all(int sock, void *buf, int len);
 
 char name[NAME_SIZE]="[DEFAULT]";
 char msg[BUF_SIZE];
@@ -41,13 +42,14 @@ int main(int argc, char *argv[]){
         error_handling("connect() error");
     
     //클라이언트 이름
-    write(sock, argv[3], strlen(argv[3]));
+    int32_t nlen = (int32_t)strlen(argv[3]);
+    int32_t net_len = htonl(nlen);
+    write(sock, &net_len, sizeof(net_len));
+    write(sock, argv[3], nlen);
 
     memset(buf, 0x00, BUF_SIZE);
     memset(file_buf, 0x00, BUF_SIZE);
     
-    sleep(1);
-
     fd = open("user_id_num.txt", O_RDWR | O_CREAT, 0666);
     if(fd<0)
         error_handling("user_id file open error");
@@ -61,8 +63,11 @@ int main(int argc, char *argv[]){
         write(sock, status, 1);
         
         file_buf[len] = '\0';
-        write(sock, file_buf, strlen(file_buf));
-        printf("기존유저 id : %s", file_buf);
+        int32_t nlen = (int32_t)strlen(file_buf);
+        int32_t net_len = htonl(nlen);
+        write(sock, &net_len, sizeof(net_len));
+        write(sock, file_buf, nlen);
+        printf("기존유저 id : %s\n", file_buf);
         
     }else if(len == 0){ // 신규 유저
         printf("if 상황 2 신규유저\n");
@@ -70,8 +75,12 @@ int main(int argc, char *argv[]){
         status = "1";
         write(sock, status, 1);
         
-        len = read(sock, buf, BUF_SIZE-1);
-        buf[len] = '\0';
+        //read(sock, &net_len, sizeof(net_len));
+        read_all(sock, &net_len, sizeof(net_len));
+        nlen = ntohl(net_len);
+        printf("file buf nlen: %d\n", nlen);
+        read(sock, buf, nlen);
+        buf[nlen] = '\0';
         
         user_id = atoi(buf);
         printf("new user_id: %d\n", user_id);
@@ -85,13 +94,44 @@ int main(int argc, char *argv[]){
         error_handling("user_id file read error");  
     }
     close(fd);
-   
-   
+    
 
+    while(1){
+        memset(buf, 0x00, BUF_SIZE);
+        
+        printf("명령어 입력 (mkroom, user_list ,exit): ");
+        fgets(buf, BUF_SIZE, stdin);
+        buf[strcspn(buf, "\n")] = 0;
+        //명령어 길이, 명령어 전송
+        int32_t nlen = (int32_t)strlen(buf);
+        int32_t net_len = htonl(nlen);
+
+        write(sock, &net_len, sizeof(net_len));
+        write(sock, buf, nlen);
+        if(strcmp(buf, "exit") == 0){
+            printf("종료\n");
+            break;
+        }else if(strcmp(buf, "mkroom") == 0){
+           char room_name[NAME_SIZE];
+           printf("방이름 입력 : ");
+           fgets(room_name, NAME_SIZE, stdin);
+           buf[strcspn(room_name, "\n")] = 0;
+
+           int32_t nlen = (int32_t)strlen(room_name);
+           int32_t net_len = htonl(nlen);
+
+           write(sock, &net_len, sizeof(net_len));
+           write(sock, room_name, nlen);
+           printf("request user_id : %d\n", user_id);
+        }
+    }
+   
+    /*
     pthread_create(&snd_thread, NULL, send_msg, (void*)&sock);
     pthread_create(&rcv_thread, NULL, recv_msg, (void*)&sock);
     pthread_join(snd_thread, &thread_return);
     pthread_join(rcv_thread, &thread_return);
+    */
     close(sock);
     return 0;
 }
@@ -124,6 +164,15 @@ void * recv_msg(void * arg){
         fputs(name_msg, stdout);
     }
     return NULL;
+}
+int read_all(int sock, void *buf, int len) {//길이 4바이트를 받는 함수
+    int received = 0;
+    while(received < len) {
+        int n = read(sock, buf + received, len - received);
+        if(n <= 0) return n;  // error or disconnected
+        received += n;
+    }
+    return received;
 }
 
 void error_handling(char * msg){
