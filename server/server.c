@@ -1,17 +1,14 @@
 #include "common.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <fcntl.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <pthread.h>
 
 #define BUF_SIZE 100
 #define MAX_CLNT 256
+#define NAME_SIZE 20
 
+typedef struct {
+    int user_id;              // 고유 ID
+    char user_name[NAME_SIZE]; // 사용자 이름, null-terminated
+    int sock_fd;              // 연결된 소켓 번호
+} ClientInfo;
 
 void *handle_clnt(void * arg);
 void send_msg(char * msg, int len);
@@ -159,6 +156,7 @@ void * handle_clnt(void * arg){
         read_all(clnt_sock, &net_len, sizeof(net_len));
         nlen = ntohl(net_len);
         read(clnt_sock, buf, nlen);
+        buf[nlen] = '\0';
 
         printf("클라이언트가 요청한 명령 : %s\n", buf);
 
@@ -181,12 +179,28 @@ void * handle_clnt(void * arg){
             return NULL;
         }else if(strcmp(buf, "mkroom") == 0){
             char room_name[NAME_SIZE];
-
+            unsigned char salt[16];
+            memset(room_name, 0x00, NAME_SIZE);
+            memset(salt, 0x00, 16);
+            
             read_all(clnt_sock, &net_len, sizeof(net_len));
             nlen = ntohl(net_len);
             read(clnt_sock, room_name, nlen);
+            room_name[nlen] = '\0';
             printf("request user_id : %d\n", new_client.user_id);
             printf("room_name : %s\n", room_name);
+            
+            //랜덤 salt값 생성
+            make_salt(salt, sizeof(salt));
+            for(int i = 0; i < 16; i++)
+                printf("%02x", salt[i]);
+            printf("\n");
+
+            int32_t nlen = (int32_t)strlen(salt);
+            int32_t net_len = htonl(nlen);
+            write(clnt_sock, &net_len, sizeof(net_len));
+            write(clnt_sock, salt, nlen);
+
 
         }
     }    

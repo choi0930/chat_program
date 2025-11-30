@@ -67,7 +67,9 @@ int main(int argc, char *argv[]){
         int32_t net_len = htonl(nlen);
         write(sock, &net_len, sizeof(net_len));
         write(sock, file_buf, nlen);
-        printf("기존유저 id : %s\n", file_buf);
+
+        user_id = atoi(file_buf);
+        printf("기존유저 id : %d\n", user_id);
         
     }else if(len == 0){ // 신규 유저
         printf("if 상황 2 신규유저\n");
@@ -112,17 +114,30 @@ int main(int argc, char *argv[]){
             printf("종료\n");
             break;
         }else if(strcmp(buf, "mkroom") == 0){
-           char room_name[NAME_SIZE];
-           printf("방이름 입력 : ");
-           fgets(room_name, NAME_SIZE, stdin);
-           buf[strcspn(room_name, "\n")] = 0;
+            char room_name[NAME_SIZE];
+            unsigned char salt[16];
+            memset(room_name, 0x00, NAME_SIZE);
+            memset(salt, 0x00, 16);
 
-           int32_t nlen = (int32_t)strlen(room_name);
-           int32_t net_len = htonl(nlen);
+            printf("방이름 입력 : ");
+            fgets(room_name, NAME_SIZE, stdin);
+            room_name[strcspn(room_name, "\n")] = 0;
 
-           write(sock, &net_len, sizeof(net_len));
-           write(sock, room_name, nlen);
-           printf("request user_id : %d\n", user_id);
+            int32_t nlen = (int32_t)strlen(room_name);
+            int32_t net_len = htonl(nlen);
+
+            write(sock, &net_len, sizeof(net_len));
+            write(sock, room_name, nlen);
+            printf("request user_id : %d\n", user_id);
+
+           //salt값 받기
+            read_all(sock, &net_len, sizeof(net_len));
+            nlen = ntohl(net_len);
+            read(sock, salt, nlen);
+            salt[nlen] = '\0';
+            for(int i = 0; i < 16; i++)
+                printf("%02x", salt[i]);
+            printf("\n");
         }
     }
    
