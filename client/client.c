@@ -1,12 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <fcntl.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <pthread.h>
+#include "common.h"
 
 #define BUF_SIZE 100
 #define NAME_SIZE 20
@@ -110,16 +102,20 @@ int main(int argc, char *argv[]){
 
         write(sock, &net_len, sizeof(net_len));
         write(sock, buf, nlen);
+
         if(strcmp(buf, "exit") == 0){
             printf("종료\n");
             break;
         }else if(strcmp(buf, "mkroom") == 0){
             char room_name[NAME_SIZE];
+            char password[NAME_SIZE];
             unsigned char salt[16];
+            unsigned char aes_key[16];
+
             memset(room_name, 0x00, NAME_SIZE);
             memset(salt, 0x00, 16);
 
-            printf("방이름 입력 : ");
+            printf("채팅방 이름 입력 : ");
             fgets(room_name, NAME_SIZE, stdin);
             room_name[strcspn(room_name, "\n")] = 0;
 
@@ -134,10 +130,23 @@ int main(int argc, char *argv[]){
             read_all(sock, &net_len, sizeof(net_len));
             nlen = ntohl(net_len);
             read(sock, salt, nlen);
-            salt[nlen] = '\0';
+        
             for(int i = 0; i < 16; i++)
                 printf("%02x", salt[i]);
             printf("\n");
+            
+            printf("채팅방 비밀번호 입력 : ");
+            fgets(password, NAME_SIZE, stdin);
+            password[strcspn(password, "\n")] = 0;
+
+            if(make_aes128_key(password, salt, nlen, aes_key, 16) == 0){
+                printf("KEY: ");
+                for (int i = 0; i < 16; i++)
+                    printf("%02x", aes_key[i]);
+                printf("\n");
+            }else{
+                printf("키 생성 실패\n");
+            }
         }
     }
    

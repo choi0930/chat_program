@@ -20,6 +20,8 @@ int clnt_socks[MAX_CLNT];
 ClientInfo clients[MAX_CLNT];
 
 pthread_mutex_t mutx;
+pthread_mutex_t file_mutx;
+
 
 int main(int argc, char *argv[]){
     int serv_sock, clnt_sock, fd, user_id_num;
@@ -33,6 +35,8 @@ int main(int argc, char *argv[]){
     }
 
     pthread_mutex_init(&mutx, NULL);
+    pthread_mutex_init(&file_mutx, NULL);
+
     serv_sock=socket(PF_INET, SOCK_STREAM, 0);
     memset(&serv_adr, 0, sizeof(serv_adr));
 
@@ -69,8 +73,8 @@ void * handle_clnt(void * arg){
     int clnt_sock = *((int*)arg);
     int str_len=0, i, fd, user_id_num;
     char msg[BUF_SIZE];
-    char clnt_name[BUF_SIZE], file_buf[BUF_SIZE], buf[BUF_SIZE], status[1];
-    pthread_mutex_lock(&mutx);
+    char clnt_name[BUF_SIZE], file_buf[BUF_SIZE], buf[BUF_SIZE], status[2];
+    
         int len = 0;
         
         //clnt_socks[clnt_cnt++]=clnt_sock;
@@ -99,7 +103,7 @@ void * handle_clnt(void * arg){
         if(strcmp(status, "1") == 0){
             
             //status = 1 -> 신규유저 user_id 발급
-        
+            pthread_mutex_lock(&file_mutx);
             fd = open("user_id_num.txt", O_RDWR);
             if(fd < 0)
                 error_handling("user_id file open error");
@@ -112,19 +116,23 @@ void * handle_clnt(void * arg){
 
             user_id_num = atoi(file_buf);
             user_id_num++;
-
-            printf("new user_id_num : %d\n", user_id_num);
             snprintf(file_buf, BUF_SIZE, "%d", user_id_num);
             nlen = (int32_t)strlen(file_buf);
+
+            lseek(fd, 0, SEEK_SET);
+            write(fd, file_buf, nlen);
+            close(fd);
+
+            pthread_mutex_unlock(&file_mutx);
+            
+            printf("new user_id_num : %d\n", user_id_num);
             printf("file buf nlen: %d\n", nlen);
             int32_t net_len = htonl(nlen);
 
             write(clnt_sock, &net_len, sizeof(net_len));
             write(clnt_sock, file_buf, nlen);
 
-            lseek(fd, 0, SEEK_SET);
-            write(fd, file_buf, nlen);
-            close(fd);
+            
         }else if(strcmp(status, "0") == 0){
             //status = 0 -> 기존 유저
             read_all(clnt_sock, &net_len, sizeof(net_len));
@@ -147,6 +155,7 @@ void * handle_clnt(void * arg){
         printf("client_user_id : %d\n", new_client.user_id);
         printf("client_name: %s\n\n", new_client.user_name);
         
+        pthread_mutex_lock(&mutx);
         //접속한 클라이언트 정보 저장
         clients[clnt_cnt++] = new_client;
         printf("현재 접속한 클라이언트 수 : [%d]\n", clnt_cnt);
@@ -166,8 +175,10 @@ void * handle_clnt(void * arg){
             pthread_mutex_lock(&mutx);
             for(i=0; i<clnt_cnt; i++){
                 if(clnt_sock == clients[i].sock_fd){
-                    while(i++<clnt_cnt-1)
+                    while(i < clnt_cnt-1){
                         clients[i] = clients[i+1];
+                        i++;
+                    }
                     break;
                 }
             
@@ -177,6 +188,7 @@ void * handle_clnt(void * arg){
             pthread_mutex_unlock(&mutx);
             close(clnt_sock);
             return NULL;
+
         }else if(strcmp(buf, "mkroom") == 0){
             char room_name[NAME_SIZE];
             unsigned char salt[16];
@@ -196,11 +208,11 @@ void * handle_clnt(void * arg){
                 printf("%02x", salt[i]);
             printf("\n");
 
-            int32_t nlen = (int32_t)strlen(salt);
+            //int32_t nlen = (int32_t)strlen(salt);
+            int32_t nlen = 16;
             int32_t net_len = htonl(nlen);
             write(clnt_sock, &net_len, sizeof(net_len));
             write(clnt_sock, salt, nlen);
-
 
         }
     }    

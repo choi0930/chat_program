@@ -8,4 +8,5 @@
 #include <netinet/in.h>
 #include <pthread.h>
 
-void make_salt(unsigned char *salt, size_t len);
+int make_aes128_key(const char *password, const unsigned char *salt, size_t salt_len, unsigned char *key_out, size_t key_len);
+
