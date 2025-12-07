@@ -2,6 +2,8 @@
 
 #define BUF_SIZE 100
 #define NAME_SIZE 20
+#define KEY_SIZE 16
+#define HASH_SIZE 32
 
 void * send_msg(void * arg);
 void * recv_msg(void * msg);
@@ -109,8 +111,9 @@ int main(int argc, char *argv[]){
         }else if(strcmp(buf, "mkroom") == 0){
             char room_name[NAME_SIZE];
             char password[NAME_SIZE];
-            unsigned char salt[16];
-            unsigned char aes_key[16];
+            unsigned char salt[KEY_SIZE];
+            unsigned char aes_key[KEY_SIZE];
+            unsigned char hash_value[HASH_SIZE];
 
             memset(room_name, 0x00, NAME_SIZE);
             memset(salt, 0x00, 16);
@@ -139,7 +142,7 @@ int main(int argc, char *argv[]){
             fgets(password, NAME_SIZE, stdin);
             password[strcspn(password, "\n")] = 0;
 
-            if(make_aes128_key(password, salt, nlen, aes_key, 16) == 0){
+            if(make_aes128_key(password, salt, nlen, aes_key, KEY_SIZE) == 0){
                 printf("KEY: ");
                 for (int i = 0; i < 16; i++)
                     printf("%02x", aes_key[i]);
@@ -147,6 +150,20 @@ int main(int argc, char *argv[]){
             }else{
                 printf("키 생성 실패\n");
             }
+
+            if(sha256_hash(aes_key, KEY_SIZE, hash_value) == 0){
+              printf("hash_value: ");
+                for (int i = 0; i < 32; i++)
+                    printf("%02x", hash_value[i]);
+                printf("\n");
+            }else{
+                printf("hash fail\n");
+            }
+
+            nlen = (int32_t)strlen(hash_value);
+            net_len = htonl(nlen);
+            write(sock, &net_len, sizeof(net_len));
+            write(sock, hash_value, nlen);
         }
     }
    
