@@ -8,5 +8,5 @@ ChatRoomInfo rooms[BUF_SIZE];
 
 pthread_mutex_t mutx;
 pthread_mutex_t file_mutx;
-pthread_mutex_t chat_room_mutx;
+pthread_mutex_t mKchat_room_mutx;
 pthread_mutex_t roomId_file_mutx;

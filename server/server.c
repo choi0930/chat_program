@@ -31,13 +31,9 @@ int main(int argc, char *argv[]){
 
     pthread_mutex_init(&mutx, NULL);
     pthread_mutex_init(&file_mutx, NULL);
-    pthread_mutex_init(&chat_room_mutx, NULL);
+    pthread_mutex_init(&mKchat_room_mutx, NULL);
     pthread_mutex_init(&roomId_file_mutx, NULL);
 
-    serv_sock=socket(PF_INET, SOCK_STREAM, 0);
-    memset(&serv_adr, 0, sizeof(serv_adr));
-
-    pthread_mutex_init(&mutx, NULL);
     serv_sock=socket(PF_INET, SOCK_STREAM, 0);
     memset(&serv_adr, 0, sizeof(serv_adr));
     serv_adr.sin_family=AF_INET;
@@ -54,8 +50,10 @@ int main(int argc, char *argv[]){
         clnt_adr_sz = sizeof(clnt_adr);
         clnt_sock=accept(serv_sock, (struct sockaddr*)&clnt_adr, &clnt_adr_sz);
 
+        int *pclnt = malloc(sizeof(int));
+        *pclnt = clnt_sock;
     
-        pthread_create(&t_id, NULL, handle_clnt, (void*)&clnt_sock);
+        pthread_create(&t_id, NULL, handle_clnt, (void*)pclnt);
         pthread_detach(t_id);
         printf("Connected client IP: %s \n", inet_ntoa(clnt_adr.sin_addr));
     }
@@ -68,34 +66,35 @@ void * handle_clnt(void * arg){
     ClientInfo new_client;
     int32_t net_len;
     int32_t nlen;
-    int clnt_sock = *((int*)arg);
+    int len = 0;
     int str_len=0, i, fd, user_id_num;
     char msg[BUF_SIZE];
-    char clnt_name[BUF_SIZE], file_buf[BUF_SIZE], buf[BUF_SIZE], status[2];
-    
-        int len = 0;
+    char clnt_name[NAME_SIZE], file_buf[BUF_SIZE], buf[BUF_SIZE], status;
+
+    int clnt_sock = *((int*)arg);
+    free(arg);
         
-        //clnt_socks[clnt_cnt++]=clnt_sock;
-        memset(clnt_name, 0x00, BUF_SIZE);
+        memset(clnt_name, 0x00, NAME_SIZE);
         memset(file_buf, 0x00, BUF_SIZE);
         //접속한 클라이언트 이름
         
         //read(clnt_sock, &net_len, sizeof(net_len));
         read_all(clnt_sock, &net_len, sizeof(net_len));
         nlen = ntohl(net_len);
-        read(clnt_sock, clnt_name, nlen);
+        read_all(clnt_sock, clnt_name, nlen);
         clnt_name[nlen] = '\0';
 
         printf("clnt_name:  %s len : %ld\n", clnt_name, strlen(clnt_name));
-        strncpy(new_client.user_name, clnt_name, strlen(clnt_name));
+        strncpy(new_client.user_name, clnt_name, NAME_SIZE-1);
+        new_client.user_name[NAME_SIZE-1] = '\0';
       
 
         //기존 유저인지 확인
-        read(clnt_sock, status, 1);
-        status[1] = '\0';
-        printf("status : %s\n", status);
+        read(clnt_sock, &status, 1);
+        
+        printf("status : %c\n", status);
 
-        if(strcmp(status, "1") == 0){
+        if(status == '1'){
             
             //status = 1 -> 신규유저 user_id 발급
             pthread_mutex_lock(&file_mutx);
@@ -128,11 +127,11 @@ void * handle_clnt(void * arg){
             write(clnt_sock, file_buf, nlen);
 
             
-        }else if(strcmp(status, "0") == 0){
+        }else if(status == '0'){
             //status = 0 -> 기존 유저
             read_all(clnt_sock, &net_len, sizeof(net_len));
             nlen = ntohl(net_len);
-            read(clnt_sock, buf, nlen);
+            read_all(clnt_sock, buf, nlen);
             buf[nlen] = '\0';
            
             user_id_num = atoi(buf);
@@ -143,7 +142,7 @@ void * handle_clnt(void * arg){
         new_client.user_id = user_id_num;
 
         /*----디버깅용----------------------------------------*/
-        printf("\n now user_id: %d\n", user_id_num);
+        //printf("\n now user_id: %d\n", user_id_num);
         printf("\nclient sock : %d\n", new_client.sock_fd);
         printf("client_user_id : %d\n", new_client.user_id);
         printf("client_name: %s\n\n", new_client.user_name);
@@ -160,7 +159,7 @@ void * handle_clnt(void * arg){
         memset(buf, 0x00, BUF_SIZE);
         read_all(clnt_sock, &net_len, sizeof(net_len));
         nlen = ntohl(net_len);
-        read(clnt_sock, buf, nlen);
+        read_all(clnt_sock, buf, nlen);
         buf[nlen] = '\0';
 
         printf("클라이언트가 요청한 명령 : %s\n", buf);
@@ -169,6 +168,14 @@ void * handle_clnt(void * arg){
             printf("[%s] 클라이언트 접속 종료\n", new_client.user_name);
             
             pthread_mutex_lock(&mutx);
+            for (i = 0; i < clnt_cnt; i++) {
+                if (clnt_sock == clients[i].sock_fd) {
+                    clients[i] = clients[clnt_cnt - 1];  // 마지막 것을 그냥 덮어씀
+                    clnt_cnt--;
+                    break;
+                }
+            }
+            /*
             for(i=0; i<clnt_cnt; i++){
                 if(clnt_sock == clients[i].sock_fd){
                     while(i < clnt_cnt-1){
@@ -180,6 +187,7 @@ void * handle_clnt(void * arg){
             
             }
             clnt_cnt--;
+            */
             printf("현재 접속한 클라이언트 수 : [%d]\n", clnt_cnt);
             pthread_mutex_unlock(&mutx);
             close(clnt_sock);
@@ -187,12 +195,13 @@ void * handle_clnt(void * arg){
 
         }else if(strcmp(buf, "mkroom") == 0){
             cmd_mkroom(clnt_sock, new_client.user_id);
-           
+        }else if(strcmp(buf, "user_list") == 0){
+            print_user_list(clnt_sock);
         }
     }    
     
 }
-
+/*
 void send_msg(char * msg, int len){
     int i;
     pthread_mutex_lock(&mutx);
@@ -200,3 +209,4 @@ void send_msg(char * msg, int len){
         write(clnt_socks[i], msg, len);
     pthread_mutex_unlock(&mutx);
 }
+    */

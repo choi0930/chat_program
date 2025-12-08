@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -42,8 +43,8 @@ void cmd_mkroom(int sock, int user_id){
            //salt값 받기
             read_all(sock, &net_len, sizeof(net_len));
             nlen = ntohl(net_len);
-            read(sock, salt, nlen);
-        
+            read_all(sock, salt, nlen);
+
             for(int i = 0; i < 16; i++)
                 printf("%02x", salt[i]);
             printf("\n");
@@ -70,8 +71,36 @@ void cmd_mkroom(int sock, int user_id){
                 printf("hash fail\n");
             }
 
-            nlen = (int32_t)strlen(hash_value);
+            nlen = HASH_SIZE;
             net_len = htonl(nlen);
             write(sock, &net_len, sizeof(net_len));
             write(sock, hash_value, nlen);
+}
+
+void print_user_list(int sock){
+    int32_t nlen, net_len;
+    int user_cnt;
+    char user_name[NAME_SIZE], recv_buf[256];
+
+    // 1) 유저 수 받기
+    read_all(sock, &net_len, sizeof(net_len));
+    nlen = ntohl(net_len);
+    read_all(sock, recv_buf, nlen);
+    recv_buf[nlen] = '\0';
+
+    user_cnt = atoi(recv_buf);
+    printf("\n--- 접속자: %d명 ---\n", user_cnt);
+
+    // 2) 각 사용자 이름 출력
+    for(int i=0; i<user_cnt; i++){
+        read_all(sock, &net_len, sizeof(net_len));
+        nlen = ntohl(net_len);
+
+        read_all(sock, user_name, nlen);
+        user_name[nlen] = '\0';
+
+        printf(" - %s\n", user_name);
+    }
+
+    printf("-----------------------\n");
 }

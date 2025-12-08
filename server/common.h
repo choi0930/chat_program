@@ -31,7 +31,7 @@ extern ChatRoomInfo rooms[BUF_SIZE];
 
 extern pthread_mutex_t mutx;
 extern pthread_mutex_t file_mutx;
-extern pthread_mutex_t chat_room_mutx;
+extern pthread_mutex_t mKchat_room_mutx;
 extern pthread_mutex_t roomId_file_mutx;
 
 #endif

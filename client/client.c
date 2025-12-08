@@ -24,7 +24,7 @@ int main(int argc, char *argv[]){
     struct sockaddr_in serv_addr;
     pthread_t snd_thread, rcv_thread;
     void * thread_return;
-    char buf[BUF_SIZE], file_buf[BUF_SIZE], *status;
+    char buf[BUF_SIZE], file_buf[BUF_SIZE], status[1];
     if(argc!=4){
         printf("Usage : %s <IP> <port> <name>\n", argv[0]);
         exit(1);
@@ -54,17 +54,17 @@ int main(int argc, char *argv[]){
     if(fd<0)
         error_handling("user_id file open error");
 
-    int len = read(fd, file_buf, BUF_SIZE);
+    int len = read(fd, file_buf, BUF_SIZE-1);
     
     if(len>0){ // user_id가 이미 존재 기존유저인경우
         printf("if 상황 1 기존 유저\n");
 
-        status = "0";
-        write(sock, status, 1);
+        //status[0] = ;
+        write(sock, "0", 1);
         
         file_buf[len] = '\0';
-        int32_t nlen = (int32_t)strlen(file_buf);
-        int32_t net_len = htonl(nlen);
+        nlen = (int32_t)strlen(file_buf);
+        net_len = htonl(nlen);
         write(sock, &net_len, sizeof(net_len));
         write(sock, file_buf, nlen);
 
@@ -74,14 +74,14 @@ int main(int argc, char *argv[]){
     }else if(len == 0){ // 신규 유저
         printf("if 상황 2 신규유저\n");
 
-        status = "1";
-        write(sock, status, 1);
+        //status[0] = "1";
+        write(sock, "1", 1);
         
         //read(sock, &net_len, sizeof(net_len));
         read_all(sock, &net_len, sizeof(net_len));
         nlen = ntohl(net_len);
         printf("file buf nlen: %d\n", nlen);
-        read(sock, buf, nlen);
+        read_all(sock, buf, nlen);
         buf[nlen] = '\0';
         
         user_id = atoi(buf);
@@ -89,10 +89,6 @@ int main(int argc, char *argv[]){
 
         write(fd, buf, strlen(buf));
     }else{ //오류
-        printf("if 상황 3 오류\n");
-        status = "-1";
-        write(sock, status, 1);
-        
         error_handling("user_id file read error");  
     }
     close(fd);
@@ -116,6 +112,8 @@ int main(int argc, char *argv[]){
             break;
         }else if(strcmp(buf, "mkroom") == 0){
             cmd_mkroom(sock, user_id);
+        }else if(strcmp(buf, "user_list") == 0){
+            print_user_list(sock);
         }
     }
    
