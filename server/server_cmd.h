@@ -9,4 +9,6 @@ int read_all(int sock, void *buf, int len);
 void cmd_mkroom(int clnt_sock, int user_id);
 void print_user_list(int clnt_sock);
 void print_room_list(int clnt_sock);
+void rm_room(int clnt_sock);
+
 #endif

@@ -157,6 +157,60 @@ void print_room_list(int clnt_sock){
 
     pthread_mutex_unlock(&mKchat_room_mutx);
 }
+
+void rm_room(int clnt_sock){
+    int user_id = 0;
+    char room_name[1024];
+    memset(room_name, 0x00, 1024);
+
+    for (int i = 0; i < clnt_cnt; i++) {
+        if (clnt_sock == clients[i].sock_fd) {
+            user_id = clients[i].user_id;
+            printf("del request user_id : %d\n", clients[i].user_id);
+            break;
+        }
+    }
+    // 요청한 클라이언트가 만든 방 개수 개산
+    int cnt = 0;
+    for (int k = 0; k < room_cnt; k++) {
+        if(user_id == rooms[k].user_id){
+            cnt++;
+        }
+    }
+
+    int32_t nlen = sizeof(int);
+    int32_t net_len;
+
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%d", cnt);
+    //방개수
+    nlen = strlen(buf);
+    net_len = htonl(nlen);
+    write(clnt_sock, &net_len, sizeof(net_len));
+    write(clnt_sock, buf, nlen);
+
+    //각 방 정보 전송 room_id + room_name
+    for(int k = 0; k < room_cnt; k++){
+        if(rooms[k].user_id == user_id){
+
+            // room_id전송
+            snprintf(buf, sizeof(buf), "%d", rooms[k].room_id);
+            nlen = strlen(buf);
+            net_len = htonl(nlen);
+            write(clnt_sock, &net_len, sizeof(net_len));
+            write(clnt_sock, buf, nlen);
+
+            //room_name 전송
+            nlen = strnlen((char*)rooms[k].room_name, NAME_SIZE);
+            net_len = htonl(nlen);
+            write(clnt_sock, &net_len, sizeof(net_len));
+            write(clnt_sock, rooms[k].room_name, nlen);
+        }
+    }
+
+
+}
+
 void error_handling(char * msg){
     fputs(msg, stderr);
     fputc('\n', stderr);

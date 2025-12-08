@@ -6,5 +6,6 @@ int read_all(int sock, void *buf, int len);
 void cmd_mkroom(int sock, int user_id);
 void print_user_list(int sock);
 void print_room_list(int sock);
+void rm_room(int sock, int user_id);
 
 #endif

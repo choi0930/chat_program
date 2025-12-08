@@ -199,6 +199,8 @@ void * handle_clnt(void * arg){
             print_user_list(clnt_sock);
         }else if(strcmp(buf, "room_list") == 0){
             print_room_list(clnt_sock);
+        }else if(strcmp(buf, "rm_room") == 0){
+            rm_room(clnt_sock);
         }
     }    
     
