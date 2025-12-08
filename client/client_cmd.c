@@ -144,7 +144,7 @@ void print_room_list(int sock){
 void rm_room(int sock, int user_id){
     //printf("del request user_id : %d\n", user_id);
     int32_t net_len, nlen;
-    char buf[128], room_name[NAME_SIZE];
+    char buf[BUF_SIZE], room_name[NAME_SIZE];
     char flag = 0;
     int room_cnt;
 
@@ -180,15 +180,28 @@ void rm_room(int sock, int user_id){
 
         printf("------------------------\n");
 
-        // 3. 삭제할 방 id 입력
+        memset(buf, 0x00, BUF_SIZE);
+        // 3. 삭제할 방 id 입력 및 전송
         printf("삭제할 room_id 입력: ");
         fgets(buf, sizeof(buf), stdin);
         buf[strcspn(buf, "\n")] = 0;
+
+        nlen = strlen(buf);
+        net_len = htonl(nlen);
+        write(sock, &net_len, sizeof(net_len));
+        write(sock, buf, nlen);
+        
+        //삭제한 방이름
+        memset(room_name, 0x00, NAME_SIZE);
+        read_all(sock, &net_len, sizeof(net_len));
+        nlen = ntohl(net_len);
+        read_all(sock, room_name, nlen);
+        room_name[nlen] = '\0';
+        
+        printf("\n--- [%s] 삭제 완료 ---\n", room_name);
+
     }else{
         printf("\n--- 생성한 채팅방 없음 ---\n");
     }
-
-    
-
-
 }
+
