@@ -19,6 +19,8 @@ extern pthread_mutex_t mutx;
 extern pthread_mutex_t mKchat_room_mutx;
 extern pthread_mutex_t roomId_file_mutx;
 
+int print_roomId_roomName(int clnt_sock);
+
 int read_all(int sock, void *buf, int len) {//길이 4바이트를 받는 함수
     int received = 0;
     while(received < len) {
@@ -71,7 +73,8 @@ void cmd_mkroom(int clnt_sock, int user_id){
                 printf("\n");
 
             new_room.user_id = user_id;
-            
+
+            memcpy(new_room.salt, salt, KEY_SIZE);
             memcpy(new_room.hash_value, hash_value, HASH_SIZE);
 
             pthread_mutex_lock(&roomId_file_mutx);
@@ -95,8 +98,6 @@ void cmd_mkroom(int clnt_sock, int user_id){
             close(fd);
             new_room.room_id = roomId_num;
             pthread_mutex_unlock(&roomId_file_mutx);
-
-            
             new_room.in_clnt_cnt = 0;
 
             printf("\nroom id : %d\n", new_room.room_id);
@@ -147,7 +148,7 @@ void print_room_list(int clnt_sock){
     }else{//채팅방이 없는경우
         write(clnt_sock, &flag, 1);
     }
-
+    
     if(flag == 1){
         // 1) 채팅방 개수 전송
         nlen = snprintf(send_buf, BUF_SIZE, "%d", room_cnt);
@@ -164,9 +165,51 @@ void print_room_list(int clnt_sock){
             write(clnt_sock, rooms[i].room_name, nlen);
         }
     }
-    
 
     pthread_mutex_unlock(&mKchat_room_mutx);
+}
+
+int print_roomId_roomName(int clnt_sock){
+        int32_t nlen, net_len;
+        char flag = 0;
+        char send_buf[BUF_SIZE];
+
+        memset(send_buf, 0x00, BUF_SIZE);
+
+        pthread_mutex_lock(&mKchat_room_mutx);
+        if(room_cnt != 0){
+            flag = 1;
+        }
+        
+        write(clnt_sock, &flag, 1);
+
+        if(flag == 1){
+            
+            nlen = snprintf(send_buf, BUF_SIZE, "%d", room_cnt);
+            net_len = htonl(nlen);
+            write(clnt_sock, &net_len, sizeof(net_len));
+            write(clnt_sock, send_buf, nlen);
+            //각 방 정보 전송 room_id + room_name
+            for(int k = 0; k < room_cnt; k++){
+                memset(send_buf, 0x00, BUF_SIZE);
+
+                // room_id전송
+                snprintf(send_buf, BUF_SIZE, "%d", rooms[k].room_id);
+                nlen = strlen(send_buf);
+                net_len = htonl(nlen);
+                write(clnt_sock, &net_len, sizeof(net_len));
+                write(clnt_sock, send_buf, nlen);
+
+                //room_name 전송
+                nlen = strnlen((char*)rooms[k].room_name, NAME_SIZE);
+                net_len = htonl(nlen);
+                write(clnt_sock, &net_len, sizeof(net_len));
+                write(clnt_sock, rooms[k].room_name, nlen);
+            }
+            
+        }
+        pthread_mutex_unlock(&mKchat_room_mutx);
+        return flag == 1 ? 1 : 0;
 }
 
 void rm_room(int clnt_sock, int user_id){
@@ -258,6 +301,66 @@ void rm_room(int clnt_sock, int user_id){
         }
         pthread_mutex_unlock(&mKchat_room_mutx);
     }
+}
+
+void join_room(int clnt_sock, int user_id){
+    int check = print_roomId_roomName(clnt_sock);
+    int32_t net_len, nlen;
+    char recv_buf[BUF_SIZE];
+    char flag = 0;
+    unsigned char salt[KEY_SIZE];
+    unsigned char hash_value[HASH_SIZE];
+
+    memset(recv_buf, 0x00, BUF_SIZE);
+    if(check == 1){
+        read_all(clnt_sock, &net_len, sizeof(net_len));
+        nlen = ntohl(net_len);
+        read_all(clnt_sock, recv_buf, nlen);
+        recv_buf[nlen] = '\0';
+        int room_id = atoi(recv_buf);
+        printf("입장요청 room_id : %d\n", room_id);
+
+        //요청받은 채팅방의 salt값
+        pthread_mutex_lock(&mKchat_room_mutx); 
+        for (int i = 0; i < room_cnt; i++) {
+            if (room_id == rooms[i].room_id) {
+                memcpy(salt, rooms[i].salt, KEY_SIZE);
+                break;
+            }
+        }
+        pthread_mutex_unlock(&mKchat_room_mutx);
+        //salt값 send client
+        nlen = 16;
+        net_len = htonl(nlen);
+        write(clnt_sock, &net_len, sizeof(net_len));
+        write(clnt_sock, salt, nlen);
+
+        //hash값 recv
+        read_all(clnt_sock, &net_len, sizeof(net_len));
+        nlen = ntohl(net_len);
+        read_all(clnt_sock, hash_value, nlen);
+
+        pthread_mutex_lock(&mKchat_room_mutx); 
+        for (int i = 0; i < room_cnt; i++) {
+            if (room_id == rooms[i].room_id) {
+                if(memcmp(hash_value, rooms[i].hash_value, HASH_SIZE) == 0){
+                    printf("hash match!\n");
+                    flag = 1;
+                }else{
+                    printf("hash mismatch!\n");
+                }
+                break;
+            }
+        }
+        pthread_mutex_unlock(&mKchat_room_mutx);
+        
+        write(clnt_sock, &flag, 1);
+
+        if(flag == 1){
+            
+        }
+    }
+        
 }
 
 void error_handling(char * msg){

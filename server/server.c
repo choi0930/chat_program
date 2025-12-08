@@ -201,6 +201,8 @@ void * handle_clnt(void * arg){
             print_room_list(clnt_sock);
         }else if(strcmp(buf, "rm_room") == 0){
             rm_room(clnt_sock, new_client.user_id);
+        }else if(strcmp(buf, "join_room") == 0){
+            join_room(clnt_sock, new_client.user_id);
         }
     }    
     

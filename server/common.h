@@ -18,6 +18,7 @@ typedef struct {
     int room_id;               // 방  ID
     int user_id;              // 생성자 ID
     unsigned char room_name[NAME_SIZE]; //방이름
+    unsigned char salt[KEY_SIZE]; //salt
     unsigned char hash_value[HASH_SIZE]; //비밀번호 hash값
     int clnt_users[BUF_SIZE]; // 접속자 정보
     int in_clnt_cnt; //접속자 수

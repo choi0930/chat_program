@@ -9,6 +9,8 @@
 #include "client_cmd.h"
 #include "crypto_util.h"
 
+int print_roomId_roomName(int sock);
+
 int read_all(int sock, void *buf, int len) {//길이 4바이트를 받는 함수
     int received = 0;
     while(received < len) {
@@ -141,6 +143,54 @@ void print_room_list(int sock){
     
 }
 
+int print_roomId_roomName(int sock){
+    int32_t nlen, net_len;
+    int room_cnt = 0;
+    char flag = 0;
+    char recv_buf[BUF_SIZE], room_name[NAME_SIZE];
+
+    memset(recv_buf, 0x00, BUF_SIZE);
+
+    read(sock, &flag, 1);
+
+    if(flag == 1){
+        // 1. 방 개수 받기
+        read_all(sock, &net_len, sizeof(net_len));
+        nlen = ntohl(net_len);
+        read_all(sock, recv_buf, nlen);
+        recv_buf[nlen] = '\0';
+
+        room_cnt = atoi(recv_buf);
+        printf("\n----- 채팅방 -----\n");
+
+        // 2. 각 방 정보 받기
+        for (int i = 0; i < room_cnt; i++) {
+            memset(recv_buf, 0x00, BUF_SIZE);
+            // room_id
+            read_all(sock, &net_len, sizeof(net_len));
+            nlen = ntohl(net_len);
+            read_all(sock, recv_buf, nlen);
+            recv_buf[nlen] = '\0';
+            int room_id = atoi(recv_buf);
+
+            // room_name
+            read_all(sock, &net_len, sizeof(net_len));
+            nlen = ntohl(net_len);
+            read_all(sock, room_name, nlen);
+            room_name[nlen] = '\0';
+
+            printf("[%d] %s\n", room_id, room_name);
+        }
+
+        printf("------------------------\n");
+
+    }else{
+        printf("\n--- 채팅방 없음 ---\n");
+    }
+
+    return flag == 1 ? 1 : 0;
+}
+
 void rm_room(int sock, int user_id){
     //printf("del request user_id : %d\n", user_id);
     int32_t net_len, nlen;
@@ -161,7 +211,7 @@ void rm_room(int sock, int user_id){
 
         // 2. 각 방 정보 받기
         for (int i = 0; i < room_cnt; i++) {
-
+            memset(buf, 0x00, BUF_SIZE);
             // room_id
             read_all(sock, &net_len, sizeof(net_len));
             nlen = ntohl(net_len);
@@ -205,3 +255,57 @@ void rm_room(int sock, int user_id){
     }
 }
 
+void join_room(int sock, char *name){
+    int check = print_roomId_roomName(sock);
+    int32_t net_len, nlen;
+    char flag = 0;
+    char password[NAME_SIZE], buf[BUF_SIZE];
+    unsigned char salt[KEY_SIZE]; 
+    unsigned char aes_key[KEY_SIZE];
+    unsigned char hash_value[HASH_SIZE];
+
+    memset(buf, 0x00, BUF_SIZE);
+    if(check == 1){
+        //입장할 채팅방 room_id 받음
+        printf("입장할 채팅방 번호를 입력해주세요 : ");
+        fgets(buf, sizeof(buf), stdin);
+        buf[strcspn(buf, "\n")] = 0;
+    
+        //room_id send server 
+        nlen = strlen(buf);
+        net_len = htonl(nlen);
+        write(sock, &net_len, sizeof(net_len));
+        write(sock, buf, nlen);
+    
+        printf("채팅방 비밀번호 입력 : ");
+        fgets(password, NAME_SIZE, stdin);
+        password[strcspn(password, "\n")] = 0;
+
+        //salt값 받음
+        read_all(sock, &net_len, sizeof(net_len));
+        nlen = ntohl(net_len);
+        read_all(sock, salt, nlen);
+        //password + salt -> aes-128
+        if(make_aes128_key(password, salt, nlen, aes_key, KEY_SIZE) != 0){
+            printf("키 생성 실패\n");
+        }
+        //aes-128 -> hash value
+        if(sha256_hash(aes_key, KEY_SIZE, hash_value) != 0){
+            printf("hash fail\n");
+        }
+
+        nlen = HASH_SIZE;
+        net_len = htonl(nlen);
+        write(sock, &net_len, sizeof(net_len));
+        write(sock, hash_value, nlen);
+
+
+        read(sock, &flag, 1);
+        if(flag == 1){
+            printf("채팅방 입장\n");
+        }else{
+            printf("채팅방 입장 실패\n");
+        }
+
+    }
+}

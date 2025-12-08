@@ -97,7 +97,7 @@ int main(int argc, char *argv[]){
     while(1){
         memset(buf, 0x00, BUF_SIZE);
         
-        printf("명령어 입력 (mkroom, user_list, room_list, rm_room, exit): ");
+        printf("명령어 입력 (mkroom, join_room, user_list, room_list, rm_room, exit): ");
         fgets(buf, BUF_SIZE, stdin);
         buf[strcspn(buf, "\n")] = 0;
         //명령어 길이, 명령어 전송
@@ -118,6 +118,8 @@ int main(int argc, char *argv[]){
             print_room_list(sock);
         }else if(strcmp(buf, "rm_room") == 0){
             rm_room(sock, user_id);
+        }else if(strcmp(buf, "join_room") == 0){
+            join_room(sock, name);
         }
     }
    
