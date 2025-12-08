@@ -108,71 +108,87 @@ void print_user_list(int sock){
 void print_room_list(int sock){
     int32_t nlen, net_len;
     int room_cnt;
+    char flag = 0;
     char room_name[NAME_SIZE], recv_buf[256];
 
-    // 1) 채팅방 개수 받기
-    read_all(sock, &net_len, sizeof(net_len));
-    nlen = ntohl(net_len);
-    read_all(sock, recv_buf, nlen);
-    recv_buf[nlen] = '\0';
+    read(sock, &flag, 1);
 
-    room_cnt = atoi(recv_buf);
-    printf("\n--- 채팅방: %d개 ---\n", room_cnt);
-
-    // 2) 각 사용자 이름 출력
-    for(int i=0; i<room_cnt; i++){
+    if(flag == 1){
+        // 1) 채팅방 개수 받기
         read_all(sock, &net_len, sizeof(net_len));
         nlen = ntohl(net_len);
+        read_all(sock, recv_buf, nlen);
+        recv_buf[nlen] = '\0';
 
-        read_all(sock, room_name, nlen);
-        room_name[nlen] = '\0';
+        room_cnt = atoi(recv_buf);
+        printf("\n--- 채팅방: %d개 ---\n", room_cnt);
 
-        printf(" - %s\n", room_name);
+        // 2) 각 사용자 이름 출력
+        for(int i=0; i<room_cnt; i++){
+            read_all(sock, &net_len, sizeof(net_len));
+            nlen = ntohl(net_len);
+
+            read_all(sock, room_name, nlen);
+            room_name[nlen] = '\0';
+
+            printf(" - %s\n", room_name);
+        }
+
+        printf("-----------------------\n");
+    }else{
+        printf("\n--- 채팅방 없음 ---\n");
     }
-
-    printf("-----------------------\n");
+    
 }
 
 void rm_room(int sock, int user_id){
-    printf("del request user_id : %d\n", user_id);
+    //printf("del request user_id : %d\n", user_id);
     int32_t net_len, nlen;
     char buf[128], room_name[NAME_SIZE];
+    char flag = 0;
     int room_cnt;
 
-    // 1. 방 개수 받기
-    read_all(sock, &net_len, sizeof(net_len));
-    nlen = ntohl(net_len);
-    read_all(sock, buf, nlen);
-    buf[nlen] = '\0';
-
-    room_cnt = atoi(buf);
-    printf("\n--- 내가 만든 방 %d개 ---\n", room_cnt);
-
-    // 2. 각 방 정보 받기
-    for (int i = 0; i < room_cnt; i++) {
-
-        // room_id
+    read(sock, &flag, 1);
+    if(flag == 1){
+        // 1. 방 개수 받기
         read_all(sock, &net_len, sizeof(net_len));
         nlen = ntohl(net_len);
         read_all(sock, buf, nlen);
         buf[nlen] = '\0';
-        int room_id = atoi(buf);
 
-        // room_name
-        read_all(sock, &net_len, sizeof(net_len));
-        nlen = ntohl(net_len);
-        read_all(sock, room_name, nlen);
-        room_name[nlen] = '\0';
+        room_cnt = atoi(buf);
+        printf("\n--- 내가 만든 방 %d개 ---\n", room_cnt);
 
-        printf("[%d] %s\n", room_id, room_name);
+        // 2. 각 방 정보 받기
+        for (int i = 0; i < room_cnt; i++) {
+
+            // room_id
+            read_all(sock, &net_len, sizeof(net_len));
+            nlen = ntohl(net_len);
+            read_all(sock, buf, nlen);
+            buf[nlen] = '\0';
+            int room_id = atoi(buf);
+
+            // room_name
+            read_all(sock, &net_len, sizeof(net_len));
+            nlen = ntohl(net_len);
+            read_all(sock, room_name, nlen);
+            room_name[nlen] = '\0';
+
+            printf("[%d] %s\n", room_id, room_name);
+        }
+
+        printf("------------------------\n");
+
+        // 3. 삭제할 방 id 입력
+        printf("삭제할 room_id 입력: ");
+        fgets(buf, sizeof(buf), stdin);
+        buf[strcspn(buf, "\n")] = 0;
+    }else{
+        printf("\n--- 생성한 채팅방 없음 ---\n");
     }
 
-    printf("------------------------\n");
-
-    // 3. 삭제할 방 id 입력
-    printf("삭제할 room_id 입력: ");
-    fgets(buf, sizeof(buf), stdin);
-    buf[strcspn(buf, "\n")] = 0;
     
+
 
 }

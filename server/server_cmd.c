@@ -134,35 +134,47 @@ void print_user_list(int clnt_sock){
 
     pthread_mutex_unlock(&mutx);
 }
+
 void print_room_list(int clnt_sock){
     int32_t net_len, nlen;
+    char flag = 0;
     char send_buf[BUF_SIZE];
 
     pthread_mutex_lock(&mKchat_room_mutx);
-
-    // 1) 채팅방 개수 전송
-    nlen = snprintf(send_buf, BUF_SIZE, "%d", room_cnt);
-    net_len = htonl(nlen);
-    write(clnt_sock, &net_len, sizeof(net_len));
-    write(clnt_sock, send_buf, nlen);
-
-    // 2) 각 채팅방 이름 전송
-    for(int i=0; i<room_cnt; i++){
-        nlen = strnlen(rooms[i].room_name, NAME_SIZE);
-        net_len = htonl(nlen);
-
-        write(clnt_sock, &net_len, sizeof(net_len));
-        write(clnt_sock, rooms[i].room_name, nlen);
+    if(room_cnt != 0){
+        flag = 1;
+        write(clnt_sock, &flag, 1);
+    }else{//채팅방이 없는경우
+        write(clnt_sock, &flag, 1);
     }
+
+    if(flag == 1){
+        // 1) 채팅방 개수 전송
+        nlen = snprintf(send_buf, BUF_SIZE, "%d", room_cnt);
+        net_len = htonl(nlen);
+        write(clnt_sock, &net_len, sizeof(net_len));
+        write(clnt_sock, send_buf, nlen);
+
+        // 2) 각 채팅방 이름 전송
+        for(int i=0; i<room_cnt; i++){
+            nlen = strnlen(rooms[i].room_name, NAME_SIZE);
+            net_len = htonl(nlen);
+
+            write(clnt_sock, &net_len, sizeof(net_len));
+            write(clnt_sock, rooms[i].room_name, nlen);
+        }
+    }
+    
 
     pthread_mutex_unlock(&mKchat_room_mutx);
 }
 
-void rm_room(int clnt_sock){
-    int user_id = 0;
+void rm_room(int clnt_sock, int user_id){
+    //int user_id = 0;
+    char flag = 0;
     char room_name[1024];
     memset(room_name, 0x00, 1024);
-
+/*
     for (int i = 0; i < clnt_cnt; i++) {
         if (clnt_sock == clients[i].sock_fd) {
             user_id = clients[i].user_id;
@@ -170,6 +182,7 @@ void rm_room(int clnt_sock){
             break;
         }
     }
+*/
     // 요청한 클라이언트가 만든 방 개수 개산
     int cnt = 0;
     for (int k = 0; k < room_cnt; k++) {
@@ -178,37 +191,44 @@ void rm_room(int clnt_sock){
         }
     }
 
-    int32_t nlen = sizeof(int);
-    int32_t net_len;
+    if(cnt != 0){
+        flag = 1;
+        write(clnt_sock, &flag, 1);
+    }else{//채팅방이 없는경우
+        write(clnt_sock, &flag, 1);
+    }
+    
+    if(flag == 1){
+        int32_t nlen = sizeof(int);
+        int32_t net_len;
 
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%d", cnt);
-    //방개수
-    nlen = strlen(buf);
-    net_len = htonl(nlen);
-    write(clnt_sock, &net_len, sizeof(net_len));
-    write(clnt_sock, buf, nlen);
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%d", cnt);
+        //방개수
+        nlen = strlen(buf);
+        net_len = htonl(nlen);
+        write(clnt_sock, &net_len, sizeof(net_len));
+        write(clnt_sock, buf, nlen);
 
-    //각 방 정보 전송 room_id + room_name
-    for(int k = 0; k < room_cnt; k++){
-        if(rooms[k].user_id == user_id){
+        //각 방 정보 전송 room_id + room_name
+        for(int k = 0; k < room_cnt; k++){
+            if(rooms[k].user_id == user_id){
 
-            // room_id전송
-            snprintf(buf, sizeof(buf), "%d", rooms[k].room_id);
-            nlen = strlen(buf);
-            net_len = htonl(nlen);
-            write(clnt_sock, &net_len, sizeof(net_len));
-            write(clnt_sock, buf, nlen);
+                // room_id전송
+                snprintf(buf, sizeof(buf), "%d", rooms[k].room_id);
+                nlen = strlen(buf);
+                net_len = htonl(nlen);
+                write(clnt_sock, &net_len, sizeof(net_len));
+                write(clnt_sock, buf, nlen);
 
-            //room_name 전송
-            nlen = strnlen((char*)rooms[k].room_name, NAME_SIZE);
-            net_len = htonl(nlen);
-            write(clnt_sock, &net_len, sizeof(net_len));
-            write(clnt_sock, rooms[k].room_name, nlen);
+                //room_name 전송
+                nlen = strnlen((char*)rooms[k].room_name, NAME_SIZE);
+                net_len = htonl(nlen);
+                write(clnt_sock, &net_len, sizeof(net_len));
+                write(clnt_sock, rooms[k].room_name, nlen);
+            }
         }
     }
-
-
 }
 
 void error_handling(char * msg){
