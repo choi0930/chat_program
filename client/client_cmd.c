@@ -104,3 +104,31 @@ void print_user_list(int sock){
 
     printf("-----------------------\n");
 }
+
+void print_room_list(int sock){
+    int32_t nlen, net_len;
+    int room_cnt;
+    char room_name[NAME_SIZE], recv_buf[256];
+
+    // 1) 채팅방 개수 받기
+    read_all(sock, &net_len, sizeof(net_len));
+    nlen = ntohl(net_len);
+    read_all(sock, recv_buf, nlen);
+    recv_buf[nlen] = '\0';
+
+    room_cnt = atoi(recv_buf);
+    printf("\n--- 채팅방: %d개 ---\n", room_cnt);
+
+    // 2) 각 사용자 이름 출력
+    for(int i=0; i<room_cnt; i++){
+        read_all(sock, &net_len, sizeof(net_len));
+        nlen = ntohl(net_len);
+
+        read_all(sock, room_name, nlen);
+        room_name[nlen] = '\0';
+
+        printf(" - %s\n", room_name);
+    }
+
+    printf("-----------------------\n");
+}

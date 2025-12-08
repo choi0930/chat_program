@@ -134,7 +134,29 @@ void print_user_list(int clnt_sock){
 
     pthread_mutex_unlock(&mutx);
 }
+void print_room_list(int clnt_sock){
+    int32_t net_len, nlen;
+    char send_buf[BUF_SIZE];
 
+    pthread_mutex_lock(&mKchat_room_mutx);
+
+    // 1) 채팅방 개수 전송
+    nlen = snprintf(send_buf, BUF_SIZE, "%d", room_cnt);
+    net_len = htonl(nlen);
+    write(clnt_sock, &net_len, sizeof(net_len));
+    write(clnt_sock, send_buf, nlen);
+
+    // 2) 각 채팅방 이름 전송
+    for(int i=0; i<room_cnt; i++){
+        nlen = strnlen(rooms[i].room_name, NAME_SIZE);
+        net_len = htonl(nlen);
+
+        write(clnt_sock, &net_len, sizeof(net_len));
+        write(clnt_sock, rooms[i].room_name, nlen);
+    }
+
+    pthread_mutex_unlock(&mKchat_room_mutx);
+}
 void error_handling(char * msg){
     fputs(msg, stderr);
     fputc('\n', stderr);

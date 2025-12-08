@@ -197,6 +197,8 @@ void * handle_clnt(void * arg){
             cmd_mkroom(clnt_sock, new_client.user_id);
         }else if(strcmp(buf, "user_list") == 0){
             print_user_list(clnt_sock);
+        }else if(strcmp(buf, "room_list") == 0){
+            print_room_list(clnt_sock);
         }
     }    
     
