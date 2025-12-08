@@ -1,11 +1,37 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <fcntl.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <pthread.h>
+#ifndef COMMON_H
+#define COMMON_H
 
-void make_salt(unsigned char *salt, size_t len);
+#include <pthread.h>
+#define BUF_SIZE 100
+#define MAX_CLNT 256
+#define NAME_SIZE 20
+#define KEY_SIZE 16
+#define HASH_SIZE 32
+
+typedef struct {
+    int user_id;              // 고유 ID
+    char user_name[NAME_SIZE]; // 사용자 이름, null-terminated
+    int sock_fd;              // 연결된 소켓 번호
+} ClientInfo;
+
+typedef struct {
+    int room_id;               // 방  ID
+    int user_id;              // 생성자 ID
+    unsigned char room_name[NAME_SIZE]; //방이름
+    unsigned char hash_value[HASH_SIZE]; //비밀번호 hash값
+    int clnt_users[BUF_SIZE]; // 접속자 정보
+    int in_clnt_cnt; //접속자 수
+} ChatRoomInfo;
+
+extern int clnt_cnt;
+extern int room_cnt;
+extern int clnt_socks[MAX_CLNT];
+extern ClientInfo clients[MAX_CLNT];
+extern ChatRoomInfo rooms[BUF_SIZE];
+
+extern pthread_mutex_t mutx;
+extern pthread_mutex_t file_mutx;
+extern pthread_mutex_t chat_room_mutx;
+extern pthread_mutex_t roomId_file_mutx;
+
+#endif

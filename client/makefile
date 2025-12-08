@@ -1,17 +1,15 @@
-.SUFFIXES : .c .o
-
 CC = gcc
-CFLAGS = -g
+CFLAGS = -g -MMD
 LDFLAGS = -lcrypto -lssl -pthread
 
-OBJS = client.o openssl.o
-SRCS = $(OBJS:.o=.c)
-HFILES = common.h
+OBJS = client.o client_cmd.o crypto_util.o
+DEPS = $(OBJS:.o=.d)
 EXE = client
 
-exe : $(OBJS) $(HFILES)
+$(EXE): $(OBJS)
 	$(CC) -o $(EXE) $(OBJS) $(LDFLAGS)
 
-clean :
-	rm -rf $(EXE)
-	rm -f *.o core core.*
+-include $(DEPS)
+
+clean:
+	rm -rf $(EXE) $(OBJS) $(DEPS)

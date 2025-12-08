@@ -1,4 +1,6 @@
 #include "common.h"
+#include "crypto_util.h"
+
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 

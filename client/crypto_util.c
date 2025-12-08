@@ -1,6 +1,10 @@
-#include "common.h"
 #include <openssl/evp.h>
 #include <openssl/rand.h>
+#include <string.h>
+
+#include "common.h"
+#include "crypto_util.h"
+
 
 int make_aes128_key(const char *password, const unsigned char *salt, size_t salt_len, unsigned char *key_out, size_t key_len){
     
