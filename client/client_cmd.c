@@ -25,7 +25,6 @@ void cmd_mkroom(int sock, int user_id){
     char room_name[NAME_SIZE];
             char password[NAME_SIZE];
             unsigned char salt[KEY_SIZE];
-            unsigned char aes_key[KEY_SIZE];
             unsigned char hash_value[HASH_SIZE];
 
             memset(room_name, 0x00, NAME_SIZE);
@@ -72,7 +71,8 @@ void cmd_mkroom(int sock, int user_id){
             }else{
                 printf("hash fail\n");
             }
-
+            
+            memset(aes_key, 0x00, KEY_SIZE);
             nlen = HASH_SIZE;
             net_len = htonl(nlen);
             write(sock, &net_len, sizeof(net_len));
@@ -255,13 +255,12 @@ void rm_room(int sock, int user_id){
     }
 }
 
-void join_room(int sock, char *name){
+int join_room(int sock, char *name){
     int check = print_roomId_roomName(sock);
     int32_t net_len, nlen;
     char flag = 0;
-    char password[NAME_SIZE], buf[BUF_SIZE];
+    char password[NAME_SIZE], buf[BUF_SIZE], room_name[NAME_SIZE];
     unsigned char salt[KEY_SIZE]; 
-    unsigned char aes_key[KEY_SIZE];
     unsigned char hash_value[HASH_SIZE];
 
     memset(buf, 0x00, BUF_SIZE);
@@ -298,14 +297,21 @@ void join_room(int sock, char *name){
         net_len = htonl(nlen);
         write(sock, &net_len, sizeof(net_len));
         write(sock, hash_value, nlen);
-
-
+        //flag
         read(sock, &flag, 1);
+        
         if(flag == 1){
-            printf("채팅방 입장\n");
+            
+            //room_name
+            read_all(sock, &net_len, sizeof(net_len));
+            nlen = ntohl(net_len);
+            read_all(sock, room_name, nlen);
+            room_name[nlen] = '\0';
+
+            printf("채팅방 -> [%s] 입장\n", room_name);
         }else{
             printf("채팅방 입장 실패\n");
         }
-
+        return flag == 1 ? 1 : 0;
     }
 }

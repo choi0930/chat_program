@@ -5,5 +5,6 @@
 #define NAME_SIZE 20
 #define KEY_SIZE 16
 #define HASH_SIZE 32
+#define MSG_SIZE 1004
 
 #endif

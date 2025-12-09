@@ -33,6 +33,7 @@ int main(int argc, char *argv[]){
     sprintf(name, "[%s]", argv[3]);
     sock=socket(PF_INET, SOCK_STREAM, 0);
 
+    memset(aes_key, 0x00, KEY_SIZE);
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family=AF_INET;
     serv_addr.sin_addr.s_addr=inet_addr(argv[1]);
@@ -93,16 +94,17 @@ int main(int argc, char *argv[]){
     }
     close(fd);
     
-
+    
     while(1){
+        int flag=0;
         memset(buf, 0x00, BUF_SIZE);
         
         printf("명령어 입력 (mkroom, join_room, user_list, room_list, rm_room, exit): ");
         fgets(buf, BUF_SIZE, stdin);
         buf[strcspn(buf, "\n")] = 0;
         //명령어 길이, 명령어 전송
-        int32_t nlen = (int32_t)strlen(buf);
-        int32_t net_len = htonl(nlen);
+        nlen = (int32_t)strlen(buf);
+        net_len = htonl(nlen);
 
         write(sock, &net_len, sizeof(net_len));
         write(sock, buf, nlen);
@@ -119,46 +121,78 @@ int main(int argc, char *argv[]){
         }else if(strcmp(buf, "rm_room") == 0){
             rm_room(sock, user_id);
         }else if(strcmp(buf, "join_room") == 0){
-            join_room(sock, name);
+            flag = join_room(sock, name);
+        }
+
+        if(flag == 1){
+        pthread_create(&snd_thread, NULL, send_msg, (void*)&sock);
+        pthread_create(&rcv_thread, NULL, recv_msg, (void*)&sock);
+        pthread_join(snd_thread, &thread_return);
+        pthread_join(rcv_thread, &thread_return);
         }
     }
-   
-    /*
-    pthread_create(&snd_thread, NULL, send_msg, (void*)&sock);
-    pthread_create(&rcv_thread, NULL, recv_msg, (void*)&sock);
-    pthread_join(snd_thread, &thread_return);
-    pthread_join(rcv_thread, &thread_return);
-    */
     close(sock);
     return 0;
 }
 
 void * send_msg(void *arg){
+    int32_t nlen, net_len;
     int sock= *((int*)arg);
-    char name_msg[NAME_SIZE+BUF_SIZE];
+    char name_msg[NAME_SIZE+MSG_SIZE+2]; //크기 1024
+    char msg[MSG_SIZE];
     while(1){
         fgets(msg, BUF_SIZE, stdin);
-        if(!strcmp(msg,"q\n") || !strcmp(msg,"Q\n")){
-            close(sock);
-            exit(0);
+        msg[strcspn(msg, "\n")] = 0;
+
+        if(strcmp(msg,"/leave") == 0){
+            //채팅방 나가기 동작
+            nlen = (int32_t)strlen(msg);
+            net_len = htonl(nlen);
+            write(sock, &net_len, sizeof(net_len));
+            write(sock, msg, nlen);
+
+            return NULL;
         }
         sprintf(name_msg,"%s %s", name, msg);
-        write(sock, name_msg, strlen(name_msg));
+
+        nlen = (int32_t)strlen(name_msg);
+        net_len = htonl(nlen);
+        write(sock, &net_len, sizeof(net_len));
+        write(sock, name_msg, nlen);
     }
     return NULL;
 }
 
 void * recv_msg(void * arg){
-    int sock=*((int *)arg);
-    char name_msg[NAME_SIZE+BUF_SIZE];
-    int str_len;
-    while(1){
-        str_len=read(sock, name_msg, NAME_SIZE+BUF_SIZE-1);
-        if(str_len==-1){
-            return (void*)-1;
+    int sock = *((int*)arg);
+    int32_t net_len, nlen;
+    char recv_msg[NAME_SIZE+MSG_SIZE];
+
+    while (1) {
+        // 1) 길이 먼저 받기
+        if (read_all(sock, &net_len, sizeof(net_len)) <= 0) {
+            printf("서버와 연결이 종료되었습니다.\n");
+            break;
         }
-        name_msg[str_len]=0;
-        fputs(name_msg, stdout);
+
+        nlen = ntohl(net_len);
+
+        // 2) 메시지 내용 받기
+        if (read_all(sock, recv_msg, nlen) <= 0) {
+            printf("서버 메시지 수신 오류.\n");
+            break;
+        }
+
+        recv_msg[nlen] = '\0';
+
+        // 3) 서버가 방 나가기 신호 보낸 경우
+        if (strcmp(recv_msg, "__LEAVE__") == 0) {
+            printf("채팅방에서 나갔습니다.\n");
+            break;  // recv 스레드 종료 → main으로 복귀
+        }
+
+        // 4) 일반 메시지 출력
+        printf("%s\n", recv_msg);
     }
     return NULL;
 }

@@ -13,10 +13,9 @@
 #include <pthread.h>
 
 void *handle_clnt(void * arg);
-void send_msg(char * msg, int len);
-
-extern int clnt_cnt;
-extern int room_cnt;
+int get_client_index(int clnt_sock);
+void send_room_msg(int room_id, int sender_uid, char *msg, int len);
+//void send_msg(char * msg, int len);
 
 int main(int argc, char *argv[]){
     int serv_sock, clnt_sock, fd, user_id_num;
@@ -68,14 +67,13 @@ void * handle_clnt(void * arg){
     int32_t nlen;
     int len = 0;
     int str_len=0, i, fd, user_id_num;
-    char msg[BUF_SIZE];
-    char clnt_name[NAME_SIZE], file_buf[BUF_SIZE], buf[BUF_SIZE], status;
+    char clnt_name[NAME_SIZE], file_buf[BUF_SIZE], buf[BUF_SIZE], msg[MSG_SIZE], status;
 
     int clnt_sock = *((int*)arg);
     free(arg);
         
-        memset(clnt_name, 0x00, NAME_SIZE);
-        memset(file_buf, 0x00, BUF_SIZE);
+    memset(clnt_name, 0x00, NAME_SIZE);
+    memset(file_buf, 0x00, BUF_SIZE);
         //접속한 클라이언트 이름
         
         //read(clnt_sock, &net_len, sizeof(net_len));
@@ -140,12 +138,13 @@ void * handle_clnt(void * arg){
         
         new_client.sock_fd = clnt_sock;
         new_client.user_id = user_id_num;
-
+        new_client.cur_room_id = -1;
         /*----디버깅용----------------------------------------*/
         //printf("\n now user_id: %d\n", user_id_num);
         printf("\nclient sock : %d\n", new_client.sock_fd);
         printf("client_user_id : %d\n", new_client.user_id);
-        printf("client_name: %s\n\n", new_client.user_name);
+        printf("client_name: %s\n", new_client.user_name);
+        printf("cur_room_id: %d\n\n", new_client.cur_room_id);
         /*---------------------------------------------------*/
 
         //접속한 클라이언트 정보 저장
@@ -153,18 +152,55 @@ void * handle_clnt(void * arg){
         clients[clnt_cnt++] = new_client;
         printf("현재 접속한 클라이언트 수 : [%d]\n", clnt_cnt);
         pthread_mutex_unlock(&mutx);
+    
+    int user_index = get_client_index(clnt_sock);
 
     while(1){
 
-        memset(buf, 0x00, BUF_SIZE);
+        memset(msg, 0x00, MSG_SIZE);
         read_all(clnt_sock, &net_len, sizeof(net_len));
         nlen = ntohl(net_len);
-        read_all(clnt_sock, buf, nlen);
-        buf[nlen] = '\0';
+        read_all(clnt_sock, msg, nlen);
+        msg[nlen] = '\0';
+         
+        if(clients[user_index].cur_room_id != -1){
+            if(strcmp(msg, "/leave") == 0){ //체팅방 나가기
+                pthread_mutex_lock(&mKchat_room_mutx); 
+                //채팅방에서 유저 out
+                for (int i = 0; i < room_cnt; i++) {
+                    if(rooms[i].room_id == clients[user_index].cur_room_id){
+                        for(int k = 0; k<rooms[i].in_clnt_cnt; k++){
+                            if(rooms[i].clnt_users[k] == clients[user_index].user_id){
+                                rooms[i].clnt_users[k] = rooms[i].clnt_users[rooms[i].in_clnt_cnt - 1];
+                                rooms[i].in_clnt_cnt--;
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+                pthread_mutex_unlock(&mKchat_room_mutx);
+                pthread_mutex_lock(&mutx);
+                //유저 정보에서 참여하고있었던 방id out
+                clients[user_index].cur_room_id = -1;
+                pthread_mutex_unlock(&mutx);
+                
+                //체팅 종료 시그널
+                char leave_signal[] = "__LEAVE__";
+                int32_t slen = strlen(leave_signal);
+                int32_t net_slen = htonl(slen);
+                write(clnt_sock, &net_slen, sizeof(net_len));
+                write(clnt_sock, leave_signal, slen);
+                
+                continue; //명령어 모드로 전환
+            }
+            send_room_msg(clients[user_index].cur_room_id, clients[user_index].user_id, msg, nlen);
+            continue; 
+        }
 
-        printf("클라이언트가 요청한 명령 : %s\n", buf);
+        printf("클라이언트가 요청한 명령 : %s\n", msg);
 
-        if(strcmp(buf, "exit") == 0){
+        if(strcmp(msg, "exit") == 0){
             printf("[%s] 클라이언트 접속 종료\n", new_client.user_name);
             
             pthread_mutex_lock(&mutx);
@@ -193,20 +229,61 @@ void * handle_clnt(void * arg){
             close(clnt_sock);
             return NULL;
 
-        }else if(strcmp(buf, "mkroom") == 0){
-            cmd_mkroom(clnt_sock, new_client.user_id);
-        }else if(strcmp(buf, "user_list") == 0){
+        }else if(strcmp(msg, "mkroom") == 0){
+            cmd_mkroom(clnt_sock, clients[user_index].user_id);
+        }else if(strcmp(msg, "user_list") == 0){
             print_user_list(clnt_sock);
-        }else if(strcmp(buf, "room_list") == 0){
+        }else if(strcmp(msg, "room_list") == 0){
             print_room_list(clnt_sock);
-        }else if(strcmp(buf, "rm_room") == 0){
-            rm_room(clnt_sock, new_client.user_id);
-        }else if(strcmp(buf, "join_room") == 0){
-            join_room(clnt_sock, new_client.user_id);
+        }else if(strcmp(msg, "rm_room") == 0){
+            rm_room(clnt_sock, clients[user_index].user_id);
+        }else if(strcmp(msg, "join_room") == 0){
+            join_room(clnt_sock, clients[user_index].user_id);
         }
     }    
     
 }
+
+int get_client_index(int clnt_sock){
+    for(int i = 0; i<clnt_cnt; i++){
+        if(clients[i].sock_fd == clnt_sock){
+            return i;
+        }
+    }
+    return -1;
+}
+
+void send_room_msg(int room_id, int sender_uid, char *msg, int len) {
+    int32_t net_len = htonl(len);
+
+    pthread_mutex_lock(&mKchat_room_mutx);
+
+    for (int r = 0; r < room_cnt; r++) {
+        if (rooms[r].room_id == room_id) {
+
+            for (int i = 0; i < rooms[r].in_clnt_cnt; i++) {
+                int uid = rooms[r].clnt_users[i];
+
+                if(uid == sender_uid) continue; // 자기 자신 제외
+                
+                // uid → sock_fd 찾기
+                for (int c = 0; c < clnt_cnt; c++) {
+                    if(clients[c].user_id == uid) {
+                        //길이 전송
+                        write(clients[c].sock_fd, &net_len, sizeof(net_len));
+                        //메시지 전송
+                        write(clients[c].sock_fd, msg, len);
+                        break;
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    pthread_mutex_unlock(&mKchat_room_mutx);
+}
+
 /*
 void send_msg(char * msg, int len){
     int i;

@@ -9,7 +9,7 @@
 #include "common.h"
 #include "crypto_util.h"
 #include "server_cmd.h"
-
+/*
 extern int room_cnt;
 extern int clnt_cnt;
 extern ClientInfo clients[MAX_CLNT]; 
@@ -18,7 +18,7 @@ extern ChatRoomInfo rooms[BUF_SIZE];
 extern pthread_mutex_t mutx;
 extern pthread_mutex_t mKchat_room_mutx;
 extern pthread_mutex_t roomId_file_mutx;
-
+*/
 int print_roomId_roomName(int clnt_sock);
 
 int read_all(int sock, void *buf, int len) {//길이 4바이트를 받는 함수
@@ -32,31 +32,31 @@ int read_all(int sock, void *buf, int len) {//길이 4바이트를 받는 함수
 }
 
 void cmd_mkroom(int clnt_sock, int user_id){
-            ChatRoomInfo new_room;
-            int fd = 0;
-            char file_buf[BUF_SIZE];
-            char room_name[NAME_SIZE];
-            unsigned char salt[KEY_SIZE];
-            unsigned char hash_value[HASH_SIZE];
-            int32_t net_len, nlen;
+    ChatRoomInfo new_room;
+    int fd = 0;
+    char file_buf[BUF_SIZE];
+    char room_name[NAME_SIZE];
+    unsigned char salt[KEY_SIZE];
+    unsigned char hash_value[HASH_SIZE];
+    int32_t net_len, nlen;
             
-            memset(file_buf, 0x00, BUF_SIZE);
-            memset(room_name, 0x00, NAME_SIZE);
+    memset(file_buf, 0x00, BUF_SIZE);
+    memset(room_name, 0x00, NAME_SIZE);
 
-            read_all(clnt_sock, &net_len, sizeof(net_len));
-            nlen = ntohl(net_len);
-            read_all(clnt_sock, room_name, nlen);
-            room_name[nlen] = '\0';
+    read_all(clnt_sock, &net_len, sizeof(net_len));
+    nlen = ntohl(net_len);
+    read_all(clnt_sock, room_name, nlen);
+    room_name[nlen] = '\0';
 
-            printf("request user_id : %d\n", user_id);
-            printf("room_name : %s\n", room_name);
-            strncpy(new_room.room_name, room_name, NAME_SIZE);
+    printf("request user_id : %d\n", user_id);
+    printf("room_name : %s\n", room_name);
+    strncpy(new_room.room_name, room_name, NAME_SIZE);
 
-            //랜덤 salt값 생성
-            make_salt(salt, sizeof(salt));
-            for(int i = 0; i < 16; i++)
-                printf("%02x", salt[i]);
-            printf("\n");
+    //랜덤 salt값 생성
+    make_salt(salt, sizeof(salt));
+    for(int i = 0; i < 16; i++)
+        printf("%02x", salt[i]);
+        printf("\n");
 
             nlen = 16;
             net_len = htonl(nlen);
@@ -305,8 +305,9 @@ void rm_room(int clnt_sock, int user_id){
 
 void join_room(int clnt_sock, int user_id){
     int check = print_roomId_roomName(clnt_sock);
+    int room_id = 0;
     int32_t net_len, nlen;
-    char recv_buf[BUF_SIZE];
+    char recv_buf[BUF_SIZE], room_name[NAME_SIZE];
     char flag = 0;
     unsigned char salt[KEY_SIZE];
     unsigned char hash_value[HASH_SIZE];
@@ -317,7 +318,7 @@ void join_room(int clnt_sock, int user_id){
         nlen = ntohl(net_len);
         read_all(clnt_sock, recv_buf, nlen);
         recv_buf[nlen] = '\0';
-        int room_id = atoi(recv_buf);
+        room_id = atoi(recv_buf);
         printf("입장요청 room_id : %d\n", room_id);
 
         //요청받은 채팅방의 salt값
@@ -345,6 +346,9 @@ void join_room(int clnt_sock, int user_id){
             if (room_id == rooms[i].room_id) {
                 if(memcmp(hash_value, rooms[i].hash_value, HASH_SIZE) == 0){
                     printf("hash match!\n");
+                    rooms[i].clnt_users[rooms[i].in_clnt_cnt] = user_id;
+                    rooms[i].in_clnt_cnt++;
+                    strncpy(room_name, rooms[i].room_name, NAME_SIZE);
                     flag = 1;
                 }else{
                     printf("hash mismatch!\n");
@@ -353,11 +357,26 @@ void join_room(int clnt_sock, int user_id){
             }
         }
         pthread_mutex_unlock(&mKchat_room_mutx);
-        
+        //flag 전송
         write(clnt_sock, &flag, 1);
-
+        //접속한 방 id 정보 유저정보의 cur_room_id에 기록
         if(flag == 1){
+            //방이름 전송
+            nlen = strlen(room_name);
+            net_len = htonl(nlen);
+            write(clnt_sock, &net_len, sizeof(net_len));
+            write(clnt_sock, room_name, nlen);
             
+            pthread_mutex_lock(&mutx); 
+
+            for(int k = 0; k<clnt_cnt; k++){
+                if(user_id == clients[k].user_id){
+                    clients[k].cur_room_id = room_id;
+                    break;
+                }
+            }
+
+            pthread_mutex_unlock(&mutx); 
         }
     }
         

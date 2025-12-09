@@ -5,7 +5,6 @@
 #include "common.h"
 #include "crypto_util.h"
 
-
 int make_aes128_key(const char *password, const unsigned char *salt, size_t salt_len, unsigned char *key_out, size_t key_len){
     
     const int iter = 100000;
@@ -39,3 +38,4 @@ int sha256_hash(const unsigned char *input, size_t input_len, unsigned char *out
 
     return (output_len == 32) ? 0 : -1;  
 }
+
