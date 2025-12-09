@@ -99,6 +99,8 @@ int main(int argc, char *argv[]){
         int flag=0;
         memset(buf, 0x00, BUF_SIZE);
         
+        //print_room_list(sock);
+
         printf("명령어 입력 (mkroom, join_room, user_list, room_list, rm_room, exit): ");
         fgets(buf, BUF_SIZE, stdin);
         buf[strcspn(buf, "\n")] = 0;
@@ -113,13 +115,13 @@ int main(int argc, char *argv[]){
             printf("종료\n");
             break;
         }else if(strcmp(buf, "mkroom") == 0){
-            cmd_mkroom(sock, user_id);
+            cmd_mkroom(sock);
         }else if(strcmp(buf, "user_list") == 0){
             print_user_list(sock);
         }else if(strcmp(buf, "room_list") == 0){
             print_room_list(sock);
         }else if(strcmp(buf, "rm_room") == 0){
-            rm_room(sock, user_id);
+            rm_room(sock);
         }else if(strcmp(buf, "join_room") == 0){
             flag = join_room(sock, name);
         }
@@ -150,7 +152,7 @@ void * send_msg(void *arg){
         fgets(msg, BUF_SIZE, stdin);
         msg[strcspn(msg, "\n")] = 0;
 
-        if(strcmp(msg,"/leave") == 0){
+        if(strcmp(msg,"/leave") == 0){ //채팅방 나가기
             //채팅방 나가기 동작
             nlen = (int32_t)strlen(msg);
             net_len = htonl(nlen);
@@ -158,6 +160,12 @@ void * send_msg(void *arg){
             write(sock, msg, nlen);
 
             return NULL;
+        }else if(strcmp(msg, "/list") == 0){ //채팅방 접속인원 보기
+            nlen = (int32_t)strlen(msg);
+            net_len = htonl(nlen);
+            write(sock, &net_len, sizeof(net_len));
+            write(sock, msg, nlen);
+            continue;
         }
         sprintf(name_msg,"%s %s", name, msg);
         cipher_len = aes_encrypt((unsigned char*)name_msg, strlen(name_msg), aes_key, iv, ciphertext);
@@ -205,15 +213,43 @@ void * recv_msg(void * arg){
             read_all(sock, msg, nlen);
             msg[nlen] = '\0';
 
-            if (strcmp(msg, "__LEAVE__") == 0) {
+            if (strcmp(msg, "__LEAVE__") == 0) { // 채팅방 종료
             printf("채팅방에서 나갔습니다.\n");
             break;  // recv 스레드 종료 → main으로 복귀
+            }else if(strcmp(msg, "__LIST__") == 0){ //채팅방에 접속한 인원 목록 출력
+                int32_t nlen, net_len;
+    int user_cnt;
+    char user_name[NAME_SIZE], recv_buf[256];
+
+    //유저 수 받기
+    read_all(sock, &net_len, sizeof(net_len));
+    nlen = ntohl(net_len);
+    read_all(sock, recv_buf, nlen);
+    recv_buf[nlen] = '\0';
+
+    user_cnt = atoi(recv_buf);
+    printf("\n--- 접속자: %d명 ---\n", user_cnt);
+
+    //각 사용자 이름 출력
+    for(int i=0; i<user_cnt; i++){
+        read_all(sock, &net_len, sizeof(net_len));
+        nlen = ntohl(net_len);
+
+        read_all(sock, user_name, nlen);
+        user_name[nlen] = '\0';
+
+        printf(" - %s\n", user_name);
+    }
+
+    printf("-----------------------\n");
             }
             continue;
         }
 
         // 2) IV 받기
-        if (read_all(sock, iv, 16) <= 0);
+        if (read_all(sock, iv, 16) <= 0){
+            break;
+        }
         
         // 3) 나머지 암호문 받기
         cipher_len = nlen - 16;
