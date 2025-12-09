@@ -45,29 +45,29 @@ void cmd_mkroom(int sock, int user_id){
             read_all(sock, &net_len, sizeof(net_len));
             nlen = ntohl(net_len);
             read_all(sock, salt, nlen);
-
+            /*
             for(int i = 0; i < 16; i++)
                 printf("%02x", salt[i]);
             printf("\n");
-            
+            */
             printf("채팅방 비밀번호 입력 : ");
             fgets(password, NAME_SIZE, stdin);
             password[strcspn(password, "\n")] = 0;
 
             if(make_aes128_key(password, salt, nlen, aes_key, KEY_SIZE) == 0){
-                printf("KEY: ");
+                /*printf("KEY: ");
                 for (int i = 0; i < 16; i++)
                     printf("%02x", aes_key[i]);
-                printf("\n");
+                printf("\n");*/
             }else{
                 printf("키 생성 실패\n");
             }
 
             if(sha256_hash(aes_key, KEY_SIZE, hash_value) == 0){
-              printf("hash_value: ");
+              /*printf("hash_value: ");
                 for (int i = 0; i < 32; i++)
                     printf("%02x", hash_value[i]);
-                printf("\n");
+                printf("\n");*/
             }else{
                 printf("hash fail\n");
             }

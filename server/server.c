@@ -54,7 +54,7 @@ int main(int argc, char *argv[]){
     
         pthread_create(&t_id, NULL, handle_clnt, (void*)pclnt);
         pthread_detach(t_id);
-        printf("Connected client IP: %s \n", inet_ntoa(clnt_adr.sin_addr));
+        //printf("Connected client IP: %s \n", inet_ntoa(clnt_adr.sin_addr));
     }
 
     close(serv_sock);
@@ -82,7 +82,7 @@ void * handle_clnt(void * arg){
         read_all(clnt_sock, clnt_name, nlen);
         clnt_name[nlen] = '\0';
 
-        printf("clnt_name:  %s len : %ld\n", clnt_name, strlen(clnt_name));
+        //printf("clnt_name:  %s len : %ld\n", clnt_name, strlen(clnt_name));
         strncpy(new_client.user_name, clnt_name, NAME_SIZE-1);
         new_client.user_name[NAME_SIZE-1] = '\0';
       
@@ -117,8 +117,8 @@ void * handle_clnt(void * arg){
 
             pthread_mutex_unlock(&file_mutx);
             
-            printf("new user_id_num : %d\n", user_id_num);
-            printf("file buf nlen: %d\n", nlen);
+            //printf("new user_id_num : %d\n", user_id_num);
+            //printf("file buf nlen: %d\n", nlen);
             int32_t net_len = htonl(nlen);
 
             write(clnt_sock, &net_len, sizeof(net_len));
@@ -133,7 +133,7 @@ void * handle_clnt(void * arg){
             buf[nlen] = '\0';
            
             user_id_num = atoi(buf);
-            printf("user_id: %d\n", user_id_num);
+            //printf("user_id: %d\n", user_id_num);
         }
         
         new_client.sock_fd = clnt_sock;
@@ -141,10 +141,12 @@ void * handle_clnt(void * arg){
         new_client.cur_room_id = -1;
         /*----디버깅용----------------------------------------*/
         //printf("\n now user_id: %d\n", user_id_num);
+        /*
         printf("\nclient sock : %d\n", new_client.sock_fd);
         printf("client_user_id : %d\n", new_client.user_id);
         printf("client_name: %s\n", new_client.user_name);
         printf("cur_room_id: %d\n\n", new_client.cur_room_id);
+        */
         /*---------------------------------------------------*/
 
         //접속한 클라이언트 정보 저장
@@ -164,44 +166,51 @@ void * handle_clnt(void * arg){
         msg[nlen] = '\0';
          
         if(clients[user_index].cur_room_id != -1){
-            if(strcmp(msg, "/leave") == 0){ //체팅방 나가기
-                pthread_mutex_lock(&mKchat_room_mutx); 
-                //채팅방에서 유저 out
-                for (int i = 0; i < room_cnt; i++) {
-                    if(rooms[i].room_id == clients[user_index].cur_room_id){
-                        for(int k = 0; k<rooms[i].in_clnt_cnt; k++){
-                            if(rooms[i].clnt_users[k] == clients[user_index].user_id){
-                                rooms[i].clnt_users[k] = rooms[i].clnt_users[rooms[i].in_clnt_cnt - 1];
-                                rooms[i].in_clnt_cnt--;
-                                break;
+            if(nlen < 16){
+                //평문 명령어
+                
+                if(strcmp(msg, "/leave") == 0){ //체팅방 나가기
+
+                    pthread_mutex_lock(&mKchat_room_mutx); 
+                    //채팅방에서 유저 out
+                    for (int i = 0; i < room_cnt; i++) {
+                        if(rooms[i].room_id == clients[user_index].cur_room_id){
+                            for(int k = 0; k<rooms[i].in_clnt_cnt; k++){
+                                if(rooms[i].clnt_users[k] == clients[user_index].user_id){
+                                    rooms[i].clnt_users[k] = rooms[i].clnt_users[rooms[i].in_clnt_cnt - 1];
+                                    rooms[i].in_clnt_cnt--;
+                                    break;
+                                }
                             }
+                            break;
                         }
-                        break;
                     }
-                }
-                pthread_mutex_unlock(&mKchat_room_mutx);
-                pthread_mutex_lock(&mutx);
-                //유저 정보에서 참여하고있었던 방id out
-                clients[user_index].cur_room_id = -1;
-                pthread_mutex_unlock(&mutx);
+                    pthread_mutex_unlock(&mKchat_room_mutx);
+                    pthread_mutex_lock(&mutx);
+                    //유저 정보에서 참여하고있었던 방id out
+                    clients[user_index].cur_room_id = -1;
+                    pthread_mutex_unlock(&mutx);
+                   
+                    //체팅 종료 시그널
+                    char leave_signal[] = "__LEAVE__";
+                    int32_t slen = strlen(leave_signal);
+                    int32_t net_slen = htonl(slen);
+                    write(clnt_sock, &net_slen, sizeof(net_len));
+                    write(clnt_sock, leave_signal, slen);
                 
-                //체팅 종료 시그널
-                char leave_signal[] = "__LEAVE__";
-                int32_t slen = strlen(leave_signal);
-                int32_t net_slen = htonl(slen);
-                write(clnt_sock, &net_slen, sizeof(net_len));
-                write(clnt_sock, leave_signal, slen);
-                
-                continue; //명령어 모드로 전환
+                    continue; //명령어 모드로 전환
+                } 
+            }else{
+                //암호문 전송
+                send_room_msg(clients[user_index].cur_room_id, clients[user_index].user_id, msg, nlen);
+                continue; 
             }
-            send_room_msg(clients[user_index].cur_room_id, clients[user_index].user_id, msg, nlen);
-            continue; 
         }
 
-        printf("클라이언트가 요청한 명령 : %s\n", msg);
+        //printf("클라이언트가 요청한 명령 : %s\n", msg);
 
         if(strcmp(msg, "exit") == 0){
-            printf("[%s] 클라이언트 접속 종료\n", new_client.user_name);
+            //printf("[%s] 클라이언트 접속 종료\n", new_client.user_name);
             
             pthread_mutex_lock(&mutx);
             for (i = 0; i < clnt_cnt; i++) {
@@ -211,19 +220,6 @@ void * handle_clnt(void * arg){
                     break;
                 }
             }
-            /*
-            for(i=0; i<clnt_cnt; i++){
-                if(clnt_sock == clients[i].sock_fd){
-                    while(i < clnt_cnt-1){
-                        clients[i] = clients[i+1];
-                        i++;
-                    }
-                    break;
-                }
-            
-            }
-            clnt_cnt--;
-            */
             printf("현재 접속한 클라이언트 수 : [%d]\n", clnt_cnt);
             pthread_mutex_unlock(&mutx);
             close(clnt_sock);
@@ -283,13 +279,3 @@ void send_room_msg(int room_id, int sender_uid, char *msg, int len) {
 
     pthread_mutex_unlock(&mKchat_room_mutx);
 }
-
-/*
-void send_msg(char * msg, int len){
-    int i;
-    pthread_mutex_lock(&mutx);
-    for(i=0; i<clnt_cnt; i++)
-        write(clnt_socks[i], msg, len);
-    pthread_mutex_unlock(&mutx);
-}
-    */

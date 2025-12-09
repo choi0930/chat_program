@@ -140,7 +140,13 @@ void * send_msg(void *arg){
     int sock= *((int*)arg);
     char name_msg[NAME_SIZE+MSG_SIZE+2]; //크기 1024
     char msg[MSG_SIZE];
+
+    unsigned char ciphertext[MSG_SIZE + 32];
+    unsigned char iv[16];
+    int cipher_len;
+
     while(1){
+
         fgets(msg, BUF_SIZE, stdin);
         msg[strcspn(msg, "\n")] = 0;
 
@@ -154,11 +160,24 @@ void * send_msg(void *arg){
             return NULL;
         }
         sprintf(name_msg,"%s %s", name, msg);
+        cipher_len = aes_encrypt((unsigned char*)name_msg, strlen(name_msg), aes_key, iv, ciphertext);
 
+        if(cipher_len < 0){
+            printf("암호화 실패\n");
+            continue;
+        }
+        int total_len = 16+cipher_len;
+        net_len = htonl(total_len);
+        write(sock, &net_len, sizeof(net_len)); //전체 길이
+        write(sock, iv, 16);                    // IV
+        write(sock, ciphertext, cipher_len);    // 암호문
+        /*
+        
         nlen = (int32_t)strlen(name_msg);
         net_len = htonl(nlen);
         write(sock, &net_len, sizeof(net_len));
         write(sock, name_msg, nlen);
+        */
     }
     return NULL;
 }
@@ -167,6 +186,11 @@ void * recv_msg(void * arg){
     int sock = *((int*)arg);
     int32_t net_len, nlen;
     char recv_msg[NAME_SIZE+MSG_SIZE];
+    
+    unsigned char ciphertext[MSG_SIZE + 32];
+    unsigned char plaintext[MSG_SIZE + NAME_SIZE];
+    unsigned char iv[16];
+    int cipher_len;
 
     while (1) {
         // 1) 길이 먼저 받기
@@ -176,23 +200,32 @@ void * recv_msg(void * arg){
         }
 
         nlen = ntohl(net_len);
+        if(nlen <16){
+            char msg[32];
+            read_all(sock, msg, nlen);
+            msg[nlen] = '\0';
 
-        // 2) 메시지 내용 받기
-        if (read_all(sock, recv_msg, nlen) <= 0) {
-            printf("서버 메시지 수신 오류.\n");
-            break;
-        }
-
-        recv_msg[nlen] = '\0';
-
-        // 3) 서버가 방 나가기 신호 보낸 경우
-        if (strcmp(recv_msg, "__LEAVE__") == 0) {
+            if (strcmp(msg, "__LEAVE__") == 0) {
             printf("채팅방에서 나갔습니다.\n");
             break;  // recv 스레드 종료 → main으로 복귀
+            }
+            continue;
         }
 
+        // 2) IV 받기
+        if (read_all(sock, iv, 16) <= 0);
+        
+        // 3) 나머지 암호문 받기
+        cipher_len = nlen - 16;
+        read_all(sock, ciphertext, cipher_len);
+        //복호화
+        int plain_len = aes_decrypt(ciphertext, cipher_len, aes_key, iv, plaintext);
+        plaintext[plain_len] = '\0';
+
+        printf("%s\n", plaintext);
+
         // 4) 일반 메시지 출력
-        printf("%s\n", recv_msg);
+        //printf("%s\n", recv_msg);
     }
     return NULL;
 }
