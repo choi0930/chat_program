@@ -7,10 +7,11 @@
 
 unsigned char aes_key[16];
 
+// AES-128 -> 16 bytes
 int make_aes128_key(const char *password, const unsigned char *salt, size_t salt_len, unsigned char *key_out, size_t key_len){
     
-    const int iter = 100000;
-
+    const int iter = 100000; //반복연산 횟수 
+    
     int check = PKCS5_PBKDF2_HMAC(password, strlen(password), salt, salt_len, iter, EVP_sha256(), key_len, key_out);
     
     return check == 1 ? 0 : -1;

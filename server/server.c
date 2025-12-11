@@ -86,11 +86,9 @@ void * handle_clnt(void * arg){
     strncpy(new_client.user_name, clnt_name, NAME_SIZE-1);
     new_client.user_name[NAME_SIZE-1] = '\0';
       
-
     //기존 유저인지 확인
     read(clnt_sock, &status, 1);
-        
-    printf("status : %c\n", status);
+    //printf("status : %c\n", status);
 
     if(status == '1'){
             
@@ -152,7 +150,7 @@ void * handle_clnt(void * arg){
         //접속한 클라이언트 정보 저장
     pthread_mutex_lock(&mutx);
     clients[clnt_cnt++] = new_client;
-    printf("현재 접속한 클라이언트 수 : [%d]\n", clnt_cnt);
+    //printf("현재 접속한 클라이언트 수 : [%d]\n", clnt_cnt);
     pthread_mutex_unlock(&mutx);
     
     int user_index = get_client_index(clnt_sock);
@@ -162,7 +160,6 @@ void * handle_clnt(void * arg){
         if(clients[user_index].cur_room_id == -1){
             print_room_list(clnt_sock);
         }*/
-       
         memset(msg, 0x00, MSG_SIZE);
         read_all(clnt_sock, &net_len, sizeof(net_len));
         nlen = ntohl(net_len);
@@ -235,7 +232,7 @@ void * handle_clnt(void * arg){
                     break;
                 }
             }
-            printf("현재 접속한 클라이언트 수 : [%d]\n", clnt_cnt);
+            //printf("현재 접속한 클라이언트 수 : [%d]\n", clnt_cnt);
             pthread_mutex_unlock(&mutx);
             close(clnt_sock);
             return NULL;
@@ -280,12 +277,9 @@ void send_room_msg(int room_id, int sender_uid, char *msg, int len) {
 
     for (int r = 0; r < room_cnt; r++) {
         if (rooms[r].room_id == room_id) {
-
             for (int i = 0; i < rooms[r].in_clnt_cnt; i++) {
                 int uid = rooms[r].clnt_users[i];
-
-                if(uid == sender_uid) continue; // 자기 자신 제외
-                
+                //if(uid == sender_uid) continue; // 자기 자신 제외  
                 // uid → sock_fd 찾기
                 for (int c = 0; c < clnt_cnt; c++) {
                     if(clients[c].user_id == uid) {
@@ -300,6 +294,5 @@ void send_room_msg(int room_id, int sender_uid, char *msg, int len) {
             break;
         }
     }
-
     pthread_mutex_unlock(&mKchat_room_mutx);
 }

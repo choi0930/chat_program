@@ -12,6 +12,9 @@
 #include "client_cmd.h"
 #include "crypto_util.h"
 
+/* 클라이언트 2개이상 실행시 2번째 클라이언트부터 이미 폴더안에 user_id_num 폴더가 있다면 삭제하고 실행*/
+//먼저 실행한 user_id_num파일을 읽어 아이디가 중복되어버림
+
 void * send_msg(void * arg);
 void * recv_msg(void * msg);
 void error_handling(char * msg);
@@ -58,9 +61,7 @@ int main(int argc, char *argv[]){
     int len = read(fd, file_buf, BUF_SIZE-1);
     
     if(len>0){ // user_id가 이미 존재 기존유저인경우
-        printf("if 상황 1 기존 유저\n");
-
-        //status[0] = ;
+        //printf("if 상황 1 기존 유저\n");
         write(sock, "0", 1);
         
         file_buf[len] = '\0';
@@ -70,23 +71,21 @@ int main(int argc, char *argv[]){
         write(sock, file_buf, nlen);
 
         user_id = atoi(file_buf);
-        printf("기존유저 id : %d\n", user_id);
+        //printf("기존유저 id : %d\n", user_id);
         
     }else if(len == 0){ // 신규 유저
-        printf("if 상황 2 신규유저\n");
-
-        //status[0] = "1";
+        //printf("if 상황 2 신규유저\n");
         write(sock, "1", 1);
         
         //read(sock, &net_len, sizeof(net_len));
         read_all(sock, &net_len, sizeof(net_len));
         nlen = ntohl(net_len);
-        printf("file buf nlen: %d\n", nlen);
+        //printf("file buf nlen: %d\n", nlen);
         read_all(sock, buf, nlen);
         buf[nlen] = '\0';
         
         user_id = atoi(buf);
-        printf("new user_id: %d\n", user_id);
+        //printf("new user_id: %d\n", user_id);
 
         write(fd, buf, strlen(buf));
     }else{ //오류
@@ -140,7 +139,7 @@ int main(int argc, char *argv[]){
 void * send_msg(void *arg){
     int32_t nlen, net_len;
     int sock= *((int*)arg);
-    char name_msg[NAME_SIZE+MSG_SIZE+2]; //크기 1024
+    char name_msg[NAME_SIZE+MSG_SIZE]; 
     char msg[MSG_SIZE];
 
     unsigned char ciphertext[MSG_SIZE + 32];
@@ -179,13 +178,6 @@ void * send_msg(void *arg){
         write(sock, &net_len, sizeof(net_len)); //전체 길이
         write(sock, iv, 16);                    // IV
         write(sock, ciphertext, cipher_len);    // 암호문
-        /*
-        
-        nlen = (int32_t)strlen(name_msg);
-        net_len = htonl(nlen);
-        write(sock, &net_len, sizeof(net_len));
-        write(sock, name_msg, nlen);
-        */
     }
     return NULL;
 }
@@ -218,30 +210,30 @@ void * recv_msg(void * arg){
             break;  // recv 스레드 종료 → main으로 복귀
             }else if(strcmp(msg, "__LIST__") == 0){ //채팅방에 접속한 인원 목록 출력
                 int32_t nlen, net_len;
-    int user_cnt;
-    char user_name[NAME_SIZE], recv_buf[256];
+                int user_cnt;
+                char user_name[NAME_SIZE], recv_buf[256];
 
-    //유저 수 받기
-    read_all(sock, &net_len, sizeof(net_len));
-    nlen = ntohl(net_len);
-    read_all(sock, recv_buf, nlen);
-    recv_buf[nlen] = '\0';
+                //유저 수 받기
+                read_all(sock, &net_len, sizeof(net_len));
+                nlen = ntohl(net_len);
+                read_all(sock, recv_buf, nlen);
+                recv_buf[nlen] = '\0';
 
-    user_cnt = atoi(recv_buf);
-    printf("\n--- 접속자: %d명 ---\n", user_cnt);
+                user_cnt = atoi(recv_buf);
+                printf("\n--- 접속자: %d명 ---\n", user_cnt);
 
-    //각 사용자 이름 출력
-    for(int i=0; i<user_cnt; i++){
-        read_all(sock, &net_len, sizeof(net_len));
-        nlen = ntohl(net_len);
+                //각 사용자 이름 출력
+                for(int i=0; i<user_cnt; i++){
+                    read_all(sock, &net_len, sizeof(net_len));
+                    nlen = ntohl(net_len);
 
-        read_all(sock, user_name, nlen);
-        user_name[nlen] = '\0';
+                    read_all(sock, user_name, nlen);
+                    user_name[nlen] = '\0';
 
-        printf(" - %s\n", user_name);
-    }
+                    printf(" - %s\n", user_name);
+                }
 
-    printf("-----------------------\n");
+                printf("-----------------------\n");
             }
             continue;
         }
